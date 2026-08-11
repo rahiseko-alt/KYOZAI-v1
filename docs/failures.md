@@ -5,6 +5,12 @@
 
 ---
 
+## 2026-08-11 Skillをインストール用パスだけに置き、リポジトリ内での直接利用条件を満たしていなかった
+
+- **事象**：初回実装ではSkillを`skills/teaching-slide-package`へ配置した。このパスはGitHub Skill Installerへ明示すれば導入できるが、リポジトリをCodexで開いた際のプロジェクトSkill自動認識パスではなかった。
+- **根因**：「GitHubからインストールできる」と「このリポジトリ内で直接発動できる」を同じ要件として扱い、後者の探索パスを確認しなかった。
+- **教訓**：リポジトリ自身で使うCodex Skillの正本は`.agents/skills/<skill-name>`へ置く。配布も同じパスをSkill Installerへ指定し、二重コピーを作らない。
+
 ## 2026-08-11 コミット作者メールがGitHubの非公開メール保護に拒否された
 
 - **事象**：`codex/import-teaching-slide-package`の初回pushが`GH007: Your push would publish a private email address`で拒否された。

@@ -54,5 +54,5 @@
 - 2026-08-11の実行では、YouTube URLから14枚のPNGを生成し、全画像を1672×941へ統一して検証した。
 - 過去の実行ログでは、各`image_gen`プロンプトに16:9、白背景、黒文字、青アクセント、表示文言、スライド固有構図、スマートフォン可読性の指定が存在した。
 - 利用者は、背景や見出し装飾の追加案ではなく、最初に一連のフローを試した白、黒、青のデザインを正本として承認した。
-- Skillの配布単位は[`skills/teaching-slide-package`](../skills/teaching-slide-package/SKILL.md)とする。
+- Skillの配布単位は[`.agents/skills/teaching-slide-package`](../.agents/skills/teaching-slide-package/SKILL.md)とする。この配置により、リポジトリをCodexで開いた場合のプロジェクトSkillとしても、GitHub Skill Installerの導入元としても利用できる。
 - Codex Skillの公開例と構造の一次情報: https://github.com/openai/skills

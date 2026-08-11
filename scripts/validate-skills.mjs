@@ -92,7 +92,7 @@ async function validateSkill(skillsRoot, entry) {
 }
 
 async function main() {
-  const skillsRoot = path.resolve(process.cwd(), "skills");
+  const skillsRoot = path.resolve(process.cwd(), ".agents", "skills");
   const entries = (await readdir(skillsRoot, { withFileTypes: true })).filter(
     (entry) => entry.isDirectory(),
   );

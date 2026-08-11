@@ -6,7 +6,7 @@
 
 - GitHubリポジトリをローカル作業フォルダへcloneした。
 - `codex/import-teaching-slide-package`ブランチを作成した。
-- 個人Skillの正本を`skills/teaching-slide-package/`へ移植した。
+- 個人Skillの正本を`.agents/skills/teaching-slide-package/`へ移植した。
 - `agents/openai.yaml`を含め、GitHubのSkill Installerから導入できる構造にした。
 - READMEをCodex Slide Makerの説明、インストール方法、実行要件へ更新した。
 - `scripts/validate-skills.mjs`と`pnpm validate:skills`を追加し、CIのquality jobへ組み込んだ。
@@ -20,6 +20,7 @@
 - Codex同梱pnpm 11のラッパーが終了せず、Corepackでリポ指定のpnpm 10.33.0へ切り替えた。
 - PowerShellの`bash`がGit BashではなくWSL2を指しており、環境判定を誤った。`docs/failures.md`へ訂正を追記した。
 - 実体のGit Bashには`setsid`がなく、既存の起動スモークはWindows上で完走できなかった。
+- 初回push後、Skillがインストール用の`skills/`にあり、リポジトリを開くだけではプロジェクトSkillとして自動認識されないことが分かった。`.agents/skills/`へ移して同じブランチへ追加pushした。
 
 ## ③次回やること
 

@@ -4,7 +4,7 @@ YouTube URLや台本を、検証済みの日本語教材スライド画像一式
 
 ## 収録Skill
 
-- [`teaching-slide-package`](skills/teaching-slide-package/SKILL.md)
+- [`teaching-slide-package`](.agents/skills/teaching-slide-package/SKILL.md)
   - YouTubeのメタデータと日本語字幕を`yt-dlp`で取得
   - 1スライド1テーマで内容、表示文言、講師台本、時間、構図を設計
   - Codex組み込み`image_gen`でスライド画像を1枚ずつ生成
@@ -17,7 +17,7 @@ YouTube URLや台本を、検証済みの日本語教材スライド画像一式
 Codexに次のGitHubパスからインストールするよう依頼します。
 
 ```text
-https://github.com/rahiseko-alt/Codex-slide-maker/tree/main/skills/teaching-slide-package
+https://github.com/rahiseko-alt/Codex-slide-maker/tree/main/.agents/skills/teaching-slide-package
 ```
 
 ローカルのSkill Installerを直接使う場合の例:
@@ -25,7 +25,7 @@ https://github.com/rahiseko-alt/Codex-slide-maker/tree/main/skills/teaching-slid
 ```powershell
 python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" `
   --repo rahiseko-alt/Codex-slide-maker `
-  --path skills/teaching-slide-package
+  --path .agents/skills/teaching-slide-package
 ```
 
 既に同名Skillがある場合、Installerは上書きしません。既存Skillを退避または削除してから再実行します。

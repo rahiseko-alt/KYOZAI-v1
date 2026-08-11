@@ -87,7 +87,7 @@
   （アプリの起動・停止は Playwright（`apps/web/playwright.config.ts`）に任せる）
 - データの保存先: なし。案件固有の字幕・生成画像・動画情報はリポジトリへ保存しない
 - 必須の環境変数（名前だけ。値は書かない）: なし
-- 共通の文言・値の置き場所: `skills/teaching-slide-package/SKILL.md`
+- 共通の文言・値の置き場所: `.agents/skills/teaching-slide-package/SKILL.md`
 - 金額計算の置き場所: なし
 
 補足（CI が回すもの）: ビルドは `pnpm -r build`、依存監査は `pnpm audit --audit-level moderate`。
