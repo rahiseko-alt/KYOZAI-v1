@@ -32,6 +32,9 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      - name: Validate Codex skills
+        run: pnpm validate:skills
+
       - name: Typecheck
         run: pnpm -r typecheck
 

@@ -21,6 +21,7 @@ cd "${REPO_ROOT}" || {
 PORT="${SMOKE_PORT:-3123}"
 BASE="http://localhost:${PORT}"
 WORK="$(mktemp -d)"
+PNPM_RUNNER="${REPO_ROOT}/scripts/run-pnpm.sh"
 
 export NODE_ENV=production
 
@@ -57,8 +58,8 @@ fi
 # 独立したプロセスグループで起動し、その ID をファイルに残す。
 # pnpm だけを kill すると子の next-server が生き残り、次回の検査が古いサーバを
 # 叩いて「通ったように見える」事故が起きるため、グループごと落とせるようにする。
-setsid bash -c 'echo $$ > "$1"; exec pnpm --filter web start --port "$2"' \
-  _ "${WORK}/pgid" "${PORT}" >"${WORK}/server.log" 2>&1 &
+setsid bash -c 'echo $$ > "$1"; exec bash "$3" --filter web start --port "$2"' \
+  _ "${WORK}/pgid" "${PORT}" "${PNPM_RUNNER}" >"${WORK}/server.log" 2>&1 &
 
 cleanup() {
   local pgid

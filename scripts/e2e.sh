@@ -31,4 +31,4 @@ if curl -s -o /dev/null --max-time 2 "http://localhost:${E2E_PORT}/" 2>/dev/null
 fi
 
 echo "== Playwright で一連の操作を検証 =="
-pnpm --filter web exec playwright test
+bash "${REPO_ROOT}/scripts/run-pnpm.sh" --filter web exec playwright test

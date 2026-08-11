@@ -1,47 +1,56 @@
-# read me
+# Codex Slide Maker
 
-新しい案件を始めるための出発点となるリポジトリ。**このリポジトリ自体でアプリを作らない。**
-コピー（または clone）して、コピー先で新しい案件の作業を始める。
+YouTube URLや台本を、検証済みの日本語教材スライド画像一式へ変換するCodex Skillを開発するリポジトリです。
 
-## 同梱しているもの
+## 収録Skill
 
-- `AGENTS.md`：開発ルールの唯一の正。エージェント向けの運用規約
-  （公開前提・秘密情報の扱い・実装の進め方・CI/PRの運用・完了の証明の作法）
-- `.claude/skills/in-out`：セッションの開始（`in`）と終了（`out`）
-- `.claude/skills/setup`：新規リポジトリの初期設定を1回だけ行う（雛形作成／既存コードの
-  取り込み、CI・lint の疎通確認、引継ぎ先の作成まで）
-- `.claude/agents/independent-verifier`：完了報告を、作業した本人以外の立場で独立検証する
-- CI 3層（`quality` / `smoke` / `e2e`）＋ それらを1つに集約する `ci-green`
-  （`.github/workflows/ci.yml`）。`scripts/setup.sh` はこの `ci-green` を branch protection の
-  必須チェックにする
-- `apps/web`：**最小の見本**（Next.js + TypeScript + pnpm）。トップページと `/api/health`、
-  セキュリティヘッダ（CSP/HSTS 等）、それぞれのテスト・E2Eが1件ずつ入っている。
-  「渡し方とチェックが本当に動いていること」を確かめるための取っ掛かりで、
-  次の案件のコードそのものではない
-- `presets/`：新規案件で使う雛形（`AGENTS.md` の下位版、`prod-smoke.yml` の見本）
+- [`teaching-slide-package`](skills/teaching-slide-package/SKILL.md)
+  - YouTubeのメタデータと日本語字幕を`yt-dlp`で取得
+  - 1スライド1テーマで内容、表示文言、講師台本、時間、構図を設計
+  - Codex組み込み`image_gen`でスライド画像を1枚ずつ生成
+  - 画像検証、モンタージュ、再生成用プロンプト、ZIPをまとめて納品
 
-## 使い方
+標準デザインは、白背景、太い黒見出し、鮮明な青の罫線と強調、黒と青の線画図解です。内容ごとに比較、工程、円環、関係図などの構図を変えます。
 
-1. このリポジトリをコピーする
-2. 新しいリポジトリで `in`（`.claude/skills/in-out`）と伝える
-3. `AGENTS.md`「コマンド」節が未記入なので `setup` skill が自動的に発火する。
-   何を作るかを聞かれるので答える
-4. `setup` の手順2で、同梱の見本（`apps/web`）を消してから、その案件の雛形を作る
+## インストール
 
-エンジニアが手動で行う場合は `bash scripts/setup.sh`（branch protection を掛ける。
-`gh` CLI の認証が要る）。
+Codexに次のGitHubパスからインストールするよう依頼します。
 
-## 起動（見本 `apps/web` を触る場合）
-
-必要なソフト: Node.js 22 以上、pnpm 10（`packageManager` で固定）。
-
-```bash
-pnpm install
-pnpm dev
+```text
+https://github.com/rahiseko-alt/Codex-slide-maker/tree/main/skills/teaching-slide-package
 ```
 
-http://localhost:3000 を開く。
+ローカルのSkill Installerを直接使う場合の例:
 
-## コマンド
+```powershell
+python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" `
+  --repo rahiseko-alt/Codex-slide-maker `
+  --path skills/teaching-slide-package
+```
 
-コマンドは `AGENTS.md` の「コマンド」節を正とする（現在は未記入。案件が決まったら埋める）。
+既に同名Skillがある場合、Installerは上書きしません。既存Skillを退避または削除してから再実行します。
+
+## 実行要件
+
+- Codexの組み込み`imagegen` Skillと`image_gen`ツール
+- `yt-dlp`。YouTube URLを入力にする場合のみ必要
+- PNGの寸法確認とモンタージュ作成に使える画像処理ランタイム
+
+APIキーや外部画像生成サービスは不要です。動画、字幕、生成画像、顧客資料などの案件固有成果物はこの公開リポジトリへ保存しません。
+
+## 開発
+
+Skill構造の検証:
+
+```bash
+pnpm validate:skills
+```
+
+リポジトリ全体の既存チェック:
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```

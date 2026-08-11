@@ -12,7 +12,8 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "audit": "pnpm audit --audit-level moderate"
+    "audit": "pnpm audit --audit-level moderate",
+    "validate:skills": "node scripts/validate-skills.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

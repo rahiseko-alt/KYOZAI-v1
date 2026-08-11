@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-08-11 コミット作者メールがGitHubの非公開メール保護に拒否された
+
+- **事象**：`codex/import-teaching-slide-package`の初回pushが`GH007: Your push would publish a private email address`で拒否された。
+- **根因**：ローカルGitのコミット作者メールが、GitHubアカウントのメール非公開設定と両立するnoreply形式になっていなかった。
+- **教訓**：公開リポジトリへ最初のコミットをpushする前に、リポジトリローカルの`user.email`をGitHubのnoreply形式へ設定する。拒否された未公開コミットは、設定後に作者情報をamendしてから再pushする。
+
+## 2026-08-11 直前2項目の「Git Bash」という環境記録を訂正する
+
+- **訂正対象**：同日項目「Windows cloneでシェルスクリプトがCRLF化し、起動スモークを実行できなかった」と「Git Bash内にpnpmがなく、改行修正後も起動スモークを開始できなかった」。
+- **誤り**：PowerShellから`bash`とだけ指定して起動した環境をGit Bashと記録した。
+- **正しくは**：その`bash`はWSL2の`/bin/bash`だった。WSL2側にはLinux版Nodeがなく、Windows側の`corepack`を直接実行できなかった。CRLFで失敗した事実は変わらないが、環境名とpnpm不在の原因説明が誤っていた。
+- **教訓**：Windowsで複数のbashが存在する場合、検証前に`uname -a`と実行ファイルの絶対パスを記録する。Git Bashの検証には`C:\Program Files\Git\bin\bash.exe`を明示する。
+
+## 2026-08-11 実体のGit Bashにはsetsidがなく、既存起動スモークを実行できなかった
+
+- **事象**：実体のGit Bashを明示して`C:\Program Files\Git\bin\bash.exe scripts/smoke.sh`を実行すると、サーバ起動処理が`setsid: command not found`で停止した。
+- **根因**：`scripts/smoke.sh`は子プロセスを確実に終了するためLinuxの`setsid`を必須としているが、Git for Windowsの標準環境には`setsid`がない。
+- **教訓**：現在の起動スモークはLinuxまたはCIで実行する検査として扱う。Windows対応を行う場合は、単に`setsid`を外して子のNext.jsプロセスを残すのではなく、Windowsのプロセスツリーを確実に終了できる実装とセットで行う。
+
+## 2026-08-11 Git Bash内にpnpmがなく、改行修正後も起動スモークを開始できなかった
+
+- **事象**：シェルスクリプトをLFへ直した後、`bash scripts/smoke.sh`はサーバ起動処理の`pnpm: not found`で停止した。PowerShellではCorepack経由のpnpm 10.33.0を利用できていた。
+- **根因**：検証スクリプトが`pnpm`実行ファイルの直接配置だけを前提とし、Node同梱のCorepack経由を扱っていなかった。WindowsのPowerShellとGit BashではPATH上の実行可能ファイルが一致しない場合がある。
+- **教訓**：リポジトリ共通の`run-pnpm.sh`を入口にし、`pnpm`がなければ`corepack pnpm`へフォールバックする。個別の検証スクリプトでパッケージマネージャー検出を重複させない。
+
+## 2026-08-11 Windows cloneでシェルスクリプトがCRLF化し、起動スモークを実行できなかった
+
+- **事象**：Windowsへcloneした作業ツリーで`bash scripts/smoke.sh`を実行すると、`$'\r': command not found`と`set: pipefail\r: invalid option name`で停止した。
+- **根因**：リポジトリにシェルスクリプトの改行コードを固定する`.gitattributes`がなく、WindowsのGit設定によって追跡済み`.sh`がCRLFとして展開された。
+- **教訓**：WindowsでもGit Bashから実行するシェルスクリプトは、`.gitattributes`で`*.sh text eol=lf`を固定する。CIがLinuxで通ることだけでは、Windows作業ツリーから同じ検証を再現できる証明にならない。
+
 ## 2026-08-11 テンプレート化にあたり、リフォーム業務ドメイン固有の項目を選別して落とした
 
 - **対応**：このリポジトリを「リフォーム見積アプリ」から汎用テンプレートへ作り直す作業の

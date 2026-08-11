@@ -1,0 +1,4 @@
+interface:
+  display_name: "教材スライド一式作成"
+  short_description: "YouTubeや台本から検証済み教材画像とZIPを生成"
+  default_prompt: "Use $teaching-slide-package to turn this YouTube URL or transcript into a complete, validated Japanese teaching-slide image package."

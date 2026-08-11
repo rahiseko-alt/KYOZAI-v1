@@ -80,16 +80,15 @@
 - 開発サーバ: `pnpm --filter web dev`（初回のみ `pnpm install`）
 - テスト（全件 / 1件だけ）: `pnpm --filter web test` / `pnpm --filter web test -- tests/content.test.ts`
 - lint / 型チェック: `pnpm --filter web lint` / `pnpm --filter web typecheck`
+- Codex Skill検証: `pnpm validate:skills`
 - 起動スモーク（受け入れ条件を HTTP で機械判定）: `bash scripts/smoke.sh`（先に `pnpm -r build`）
 - E2E（実ブラウザで一連の操作を機械判定）: `bash scripts/e2e.sh`（先に `pnpm -r build` と、
   初回のみ `pnpm --filter web exec playwright install --with-deps chromium`）
   （アプリの起動・停止は Playwright（`apps/web/playwright.config.ts`）に任せる）
-- データの保存先: 未記入（案件で決まったら、接続方法・ローカル/CIでの起動方法・
-  マイグレーションの適用方法をここに書く）
-- 必須の環境変数（名前だけ。値は書かない）: 未記入（`apps/web/.env.example` 参照）
-- 共通の文言・値の置き場所: `apps/web/lib/content.ts`
-- 金額計算の置き場所: 未記入（案件で金額計算が要るなら、画面・PDF・API が必ず通す
-  1箇所をここに書く）
+- データの保存先: なし。案件固有の字幕・生成画像・動画情報はリポジトリへ保存しない
+- 必須の環境変数（名前だけ。値は書かない）: なし
+- 共通の文言・値の置き場所: `skills/teaching-slide-package/SKILL.md`
+- 金額計算の置き場所: なし
 
 補足（CI が回すもの）: ビルドは `pnpm -r build`、依存監査は `pnpm audit --audit-level moderate`。
 
