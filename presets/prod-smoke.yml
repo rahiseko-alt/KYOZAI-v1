@@ -1,0 +1,62 @@
+# prod-smoke（見本）。公開URLができたら .github/workflows/ にコピーし、
+# 下の PROD_URL と MARKER をこの案件の値に書き換えてから使う
+# （.claude/skills/setup/SKILL.md 手順4）。
+#
+# 本番到達の外部事実チェック。
+# 実行環境(サンドボックス)は外部ホストへの直接到達を制限されていることがあるため、
+# プロキシ外の実機である GitHub Actions に本番URLを curl させて機械判定する。
+# 検査は、壊れたときに実際に赤くなる経路を含めること。見た目だけの経路
+# （静的ファイル等）しか見ていないと、環境変数やデータの保存先が無い本番でも
+# 緑と判定してしまう。データの保存先を持つ案件では、DBまで実際に到達する経路
+# （例: 動的なページを1つ）を検査に足すこと。
+
+name: prod-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+
+env:
+  # 本番URL（例: Vercel production alias）。
+  PROD_URL: "https://example.vercel.app"
+  # apps/web/lib/content.ts の HOME_HEADING と同じ値にする。
+  MARKER: "テンプレート起動確認"
+
+jobs:
+  reachable:
+    name: prod 200 + marker
+    runs-on: ubuntu-latest
+    steps:
+      - name: curl production (200 かつ MARKER を含む)
+        run: |
+          echo "Checking ${PROD_URL}"
+          code=$(curl -sS -o body.html -w '%{http_code}' --max-time 30 "${PROD_URL}")
+          echo "HTTP=${code}"
+          if [ "${code}" != "200" ]; then
+            echo "FAIL: 期待 200 に対し ${code}"
+            exit 1
+          fi
+          if ! grep -qF -- "${MARKER}" body.html; then
+            echo "FAIL: 本文にマーカー '${MARKER}' が無い"
+            exit 1
+          fi
+          echo "PROD OK: 200 かつ '${MARKER}' を ${PROD_URL} で確認"
+
+      - name: HSTS ヘッダを確認
+        run: |
+          # 本番が https かつ Strict-Transport-Security を返すこと（外部事実）。
+          hdrs=$(curl -sSI --max-time 30 "${PROD_URL}")
+          echo "${hdrs}"
+          if ! printf '%s' "${hdrs}" | grep -iq '^strict-transport-security:'; then
+            echo "FAIL: 応答に Strict-Transport-Security ヘッダが無い（main へ反映後に緑になる）"
+            exit 1
+          fi
+          echo "HSTS OK: Strict-Transport-Security を確認"
+
+      - name: ヘルスチェック /api/health が 200
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "${PROD_URL}/api/health")
+          echo "HTTP(/api/health)=${code}"
+          test "${code}" = "200"
+          echo "HEALTH OK: /api/health が 200"

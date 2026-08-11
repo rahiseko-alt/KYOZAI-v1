@@ -1,0 +1,136 @@
+name: CI
+
+# 機械の審判（machine judge）。型/Lint/テスト/ビルド/起動確認を機械的に検査する
+# （AI の自己申告を証拠にしない。完了報告の evidence はこのワークフローの run URL / commit SHA を指す）。
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  quality:
+    name: typecheck / lint / test / build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Lint
+        run: pnpm -r lint
+
+      # データの保存先を持つ案件になったら、ここに「ローカルの器（Docker 等）を
+      # まっさらに起動して実際にクエリを出す」ステップを足す（モックにしない）。
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Audit (fail on moderate+)
+        run: pnpm audit --audit-level moderate
+
+  smoke:
+    name: 起動スモーク (build → start → 受け入れ条件を HTTP で判定)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      # 到達性と受け入れ条件を外部事実(HTTP の応答)で縛る。スクショにしない。
+      # 中身は scripts/smoke.sh。手元でも同じコマンドで同じ検査ができる。
+      - name: Smoke (scripts/smoke.sh)
+        run: bash scripts/smoke.sh
+
+  e2e:
+    name: E2E (実ブラウザで一連の操作を検証)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm -r build
+
+      # 実ブラウザ(Playwright)で受け入れ条件を検証する。スクショにしない。
+      # 中身は scripts/e2e.sh。手元でも同じコマンドで同じ検査ができる。
+      - name: E2E (scripts/e2e.sh)
+        run: bash scripts/e2e.sh
+
+  # 集約ゲート＝branch protection が要求する「安定した1つの必須チェック」。
+  # 内部ジョブ(quality/smoke/e2e)の名前や中身が変わっても context 名は 'ci-green' で不変。
+  # scripts/setup.sh はこの 'ci-green' だけを必須指定する。
+  # job id をそのまま context 名にする（'name:' は設定しない。両方あるとどちらが必須チェック名か
+  # 分からなくなるため）。ここを変えると必須チェックが永久に待ち状態になり全 PR がマージ不能になる。
+  ci-green:
+    needs: [quality, smoke, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 上流ジョブが全て success か検査（1つでも失敗/スキップなら赤）
+        run: |
+          if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ] || [ "${{ needs.e2e.result }}" != "success" ]; then
+            echo "ci-green: FAIL (quality=${{ needs.quality.result }} smoke=${{ needs.smoke.result }} e2e=${{ needs.e2e.result }})"
+            exit 1
+          fi
+          echo "ci-green: OK（quality / smoke / e2e ともに success）"
