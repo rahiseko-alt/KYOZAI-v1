@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-job.schema.json",
+  "title": "KYOZAI Job",
+  "type": "object",
+  "required": ["job_id", "product", "status", "created_at", "paths"],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "description": "Stable job id or slug used across drafts, final outputs, attachments, tmp, and cache."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Future SaaS tenant id. Optional for local development."
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Future SaaS project id. Optional for local development."
+    },
+    "product": {
+      "type": "string",
+      "enum": ["kyozai-slide", "kyozai-support", "kyozai-design", "kyozai-movie", "kyozai-orchestrator"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "ready_for_review", "final", "failed", "archived"]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "paths": {
+      "type": "object",
+      "required": ["draft", "final", "attachments", "tmp", "cache"],
+      "properties": {
+        "draft": { "type": "string" },
+        "final": { "type": "string" },
+        "attachments": { "type": "string" },
+        "tmp": { "type": "string" },
+        "cache": { "type": "string" }
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "artifact_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

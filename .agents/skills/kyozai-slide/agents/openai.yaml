@@ -1,0 +1,4 @@
+interface:
+  display_name: "KYOZAI Slide"
+  short_description: "URLや台本から教材スライド画像一式を生成"
+  default_prompt: "Use $kyozai-slide to turn this YouTube URL or transcript into a complete, validated Japanese teaching-slide image package with KYOZAI draft/final output separation."

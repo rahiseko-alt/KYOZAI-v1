@@ -1,0 +1,4 @@
+interface:
+  display_name: "KYOZAI Movie"
+  short_description: "教材スライドを動く動画資料用の絵コンテへ変換"
+  default_prompt: "Use $kyozai-movie to turn this deck-spec and slide package into a motion storyboard and video generation prompts."

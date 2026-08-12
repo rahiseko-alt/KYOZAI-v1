@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-artifact.schema.json",
+  "title": "KYOZAI Artifact",
+  "type": "object",
+  "required": ["artifact_id", "job_id", "kind", "lifecycle", "path_or_uri", "created_at"],
+  "properties": {
+    "artifact_id": {
+      "type": "string"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "source",
+        "attachment_original",
+        "attachment_normalized",
+        "deck_spec",
+        "design_profile",
+        "slide_image",
+        "support_doc",
+        "support_pdf",
+        "motion_storyboard",
+        "video_prompt",
+        "video",
+        "zip",
+        "validation"
+      ]
+    },
+    "lifecycle": {
+      "type": "string",
+      "enum": ["draft", "final", "tmp", "cache", "attachment"]
+    },
+    "path_or_uri": {
+      "type": "string",
+      "description": "Local path during development, object-storage URI in SaaS."
+    },
+    "media_type": {
+      "type": "string"
+    },
+    "sha256": {
+      "type": "string"
+    },
+    "source_asset_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

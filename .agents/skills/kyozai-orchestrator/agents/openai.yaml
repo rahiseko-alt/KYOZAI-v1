@@ -1,0 +1,4 @@
+interface:
+  display_name: "KYOZAI Orchestrator"
+  short_description: "KYOZAI系Skillを連動させ教材パッケージを組む"
+  default_prompt: "Use $kyozai-orchestrator to decide which KYOZAI skills are needed and coordinate a full teaching-material package."

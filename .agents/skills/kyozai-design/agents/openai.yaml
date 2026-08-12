@@ -1,0 +1,4 @@
+interface:
+  display_name: "KYOZAI Design"
+  short_description: "参考スライドやテンプレサイトのデザインを分析"
+  default_prompt: "Use $kyozai-design to analyze this reference slide or template site and produce a reusable design-profile.json for KYOZAI Slide."

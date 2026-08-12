@@ -1,13 +1,38 @@
 ---
-name: teaching-slide-package
-description: Legacy compatibility Skill for the former teaching-slide-package workflow. Prefer the canonical KYOZAI Slide Skill (`kyozai-slide`) for new work. Handles YouTube URL、台本、文字起こし、動画レポート、セミナー原稿を1スライド1テーマの教材スライド一式へ変換する旧ワークフロー。
+name: kyozai-slide
+description: KYOZAI Slide。YouTube URL、台本、文字起こし、動画レポート、セミナー原稿を、1スライド1テーマの教材スライド一式へ変換する正本Skill。URLからのメタデータ・字幕取得、表示内容、講師台本、300文字/分の時間計算、内容別レイアウト設計、共通デザイントークン、Codex ImageGenによる最終画像生成、画像検証、下書き/清書を分けたKYOZAI出力構成、納品用ZIP作成までを扱う。「このYouTubeをスライドにして」「URLから教材を作って」「KYOZAI Slideで」「教材スライドにして」「台本からスライドを作って」「1枚1テーマ」「各スライドの時間も出して」「画像でスライドを作って」等で発火。
 ---
 
-# Teaching Slide Package
+# KYOZAI Slide
 
-Legacy note: このSkillは互換用。新規の正本は `.agents/skills/kyozai-slide/` の `kyozai-slide`。KYOZAI出力ライフサイクル、下書き/清書分離、KYOZAI Support連動が必要な場合は `kyozai-slide` を優先する。
+KYOZAI Slideは、台本や文字起こしを、講師がそのまま使える教材スライドへ変換する正本Skill。内容設計を先に完了し、画像生成は必ず最後のビジュアル制作工程に置く。
 
-台本や文字起こしを、講師がそのまま使える教材スライドへ変換する。内容設計を先に完了し、画像生成は必ず最後のビジュアル制作工程に置く。
+旧 `teaching-slide-package` は移行元。新規実装と今後の拡張はこの `kyozai-slide` を正本として扱う。
+
+## KYOZAI出力ライフサイクル
+
+生成物は下書きと清書を必ず分ける。SaaS化を前提に、ローカルパスは将来のオブジェクトストレージ構成の開発用アダプタとして扱う。
+
+```text
+outputs/
+├─ drafts/{job_id}/        # 作業途中。安全に消せる
+├─ final/{job_id}/         # 清書・納品物。勝手に消さない
+├─ attachments/{job_id}/   # ユーザー添付の原本と正規化ファイル。勝手に消さない
+├─ tmp/{job_id}/           # 一時レンダリング等。安全に消せる
+└─ cache/{source_hash}/    # 再取得可能なキャッシュ。安全に消せる
+```
+
+ルール:
+
+1. 試行錯誤、失敗画像、途中JSON、レンダリング確認PNGは `outputs/drafts/{job_id}/` または `outputs/tmp/{job_id}/` に置く。
+2. ユーザーへ渡す最終版だけを `outputs/final/{job_id}/` に置く。
+3. 添付画像、PDF、PPTX、音声、動画、テンプレート参照は `outputs/attachments/{job_id}/originals/` に原本保存し、上書きしない。
+4. 変換済み添付は `outputs/attachments/{job_id}/normalized/` に置く。
+5. 最終ZIPは `outputs/final/{job_id}/package.zip` に作る。
+6. `outputs/drafts/`、`outputs/tmp/`、`outputs/cache/` は安全に削除できる前提で作る。
+7. `outputs/final/` と `outputs/attachments/` はユーザーの明示なしに削除しない。
+
+各ジョブには `manifest.json` を置き、`job_id`、元URL、添付ファイル、生成物、清書への昇格対象を記録する。
 
 ## URLから完成画像までの標準直通フロー
 
@@ -305,10 +330,12 @@ Avoid: 余計な文字、ロゴ、透かし、写真調背景、装飾優先、�
 
 ### Step 10｜一式を納品する
 
-標準パッケージ:
+作業中は `outputs/drafts/{job_id}/` に保存し、検証に通った清書だけを `outputs/final/{job_id}/` に昇格する。
+
+下書きパッケージ:
 
 ```text
-{date}-{video-slug}-slide-package/
+outputs/drafts/{job_id}/
 ├── deck-spec.json
 ├── deck-content-and-script.txt
 ├── source-info.json
@@ -322,8 +349,28 @@ Avoid: 余計な文字、ロゴ、透かし、写真調背景、装飾優先、�
 ├── source/
 │   ├── video.info.json
 │   └── video.ja-orig.json3
-└── montage.png
-{date}-{video-slug}-slide-package-complete.zip
+├── montage.png
+└── validation/
+    └── image-validation.json
+```
+
+清書パッケージ:
+
+```text
+outputs/final/{job_id}/
+├── slides/
+│   ├── cover.png
+│   ├── slide-01.png
+│   ├── ...
+│   └── cta.png
+├── deck-spec.json
+├── deck-content-and-script.txt
+├── source-info.json
+├── image-prompts.json
+├── image-validation.json
+├── montage.png
+├── manifest.json
+└── package.zip
 ```
 
 `source-info.json` には最低限、動画タイトル、元URLまたは元ファイル、収録時間、処理日、`video-slug` を記録する。表紙タイトルとファイル名の両方から、どの動画の教材か判別できる状態にする。
@@ -338,6 +385,10 @@ Avoid: 余計な文字、ロゴ、透かし、写真調背景、装飾優先、�
 - 300文字/分換算の時間
 
 `deck-spec.json` は同じ情報を機械処理可能な構造で保持する。`image-prompts.json` は再生成可能なプロンプト、`image-validation.json` は画像検証結果を保持する。PPTXまたはGoogle Slides化はユーザーが明示した場合のみ追加する。
+
+`manifest.json` には `job_id`、source refs、attachments、draft artifacts、final artifacts、検証ステータス、ZIPパスを記録する。最終ZIPには清書だけを入れ、失敗画像、途中生成物、レンダリング確認画像は入れない。
+
+ユーザーが「講師資料」「説明用資料」「カンペ」「事前/事後資料」「A4印刷資料」を求めた場合は、清書済みの `deck-spec.json`、`source-info.json`、スライド画像を `kyozai-support` に渡して講師サポート資料を作る。
 
 ## チャット表示のルール
 

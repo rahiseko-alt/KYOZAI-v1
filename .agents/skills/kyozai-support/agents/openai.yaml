@@ -1,0 +1,4 @@
+interface:
+  display_name: "KYOZAI Support"
+  short_description: "教材スライド用の講師資料とA4カンペを生成"
+  default_prompt: "Use $kyozai-support to create instructor preparation notes, a one-page A4 live cue sheet, and a one-page A4 post-explanation handout from this deck."

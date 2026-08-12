@@ -29,3 +29,19 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# KYOZAI generated artifacts
+# Safe to delete: outputs/drafts, outputs/tmp, outputs/cache.
+# Keep outputs/final and outputs/attachments by storage policy, not Git.
+outputs/**
+!outputs/
+!outputs/drafts/
+!outputs/drafts/.gitkeep
+!outputs/final/
+!outputs/final/.gitkeep
+!outputs/attachments/
+!outputs/attachments/.gitkeep
+!outputs/tmp/
+!outputs/tmp/.gitkeep
+!outputs/cache/
+!outputs/cache/.gitkeep
