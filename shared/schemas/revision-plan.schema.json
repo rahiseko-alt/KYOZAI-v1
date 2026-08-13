@@ -1,0 +1,624 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/revision-plan.schema.json",
+  "title": "KYOZAI Revision Plan",
+  "description": "The immutable, executable plan derived from one revision request. All changes must be expressed as a typed operation and guarded by explicit invariants.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "planId",
+    "revisionId",
+    "jobId",
+    "baseVersionId",
+    "candidateVersionId",
+    "baseManifestSha256",
+    "requestSha256",
+    "plannedAt",
+    "scope",
+    "targetSlides",
+    "allowedFields",
+    "invariants",
+    "invariantChecks",
+    "operations",
+    "retryPolicy",
+    "rollbackPolicy",
+    "finalPromotion"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "kyozai-revision-plan@1.0.0" },
+    "planId": { "$ref": "#/$defs/id" },
+    "revisionId": { "$ref": "#/$defs/id" },
+    "jobId": { "$ref": "#/$defs/id" },
+    "baseVersionId": { "$ref": "#/$defs/id" },
+    "candidateVersionId": { "$ref": "#/$defs/id" },
+    "baseManifestSha256": { "$ref": "#/$defs/sha256" },
+    "requestSha256": { "$ref": "#/$defs/sha256" },
+    "plannedAt": { "type": "string", "format": "date-time" },
+    "scope": { "$ref": "#/$defs/scope" },
+    "targetSlides": { "$ref": "#/$defs/slideNumbers" },
+    "allowedFields": { "$ref": "#/$defs/slideFieldMap" },
+    "invariants": {
+      "$ref": "#/$defs/slideFieldMap",
+      "description": "Validator-compatible preserved fields. Each key must be a target slide number; the Phase 0 validator rejects keys outside targetSlides."
+    },
+    "invariantChecks": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/invariant" },
+      "description": "Typed evidence-level invariants in addition to the validator-compatible per-slide field map."
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/operation" }
+    },
+    "retryPolicy": {
+      "type": "object",
+      "required": ["maxAutomaticRetries", "retryableFailureCodes", "preserveScope", "replanAllowed"],
+      "properties": {
+        "maxAutomaticRetries": { "const": 2 },
+        "retryableFailureCodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "provider_timeout",
+              "provider_transient_error",
+              "render_invalid",
+              "image_blank",
+              "text_clipped",
+              "overlap_detected",
+              "visual_validation_failed"
+            ]
+          }
+        },
+        "preserveScope": { "const": true },
+        "replanAllowed": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "rollbackPolicy": {
+      "type": "object",
+      "required": ["onValidationFailure", "baseVersionId", "baseManifestSha256", "preserveBaseFinal", "promoteCandidateAfterRollback", "retainFailedEvidence"],
+      "properties": {
+        "onValidationFailure": { "const": "rollback_to_base" },
+        "baseVersionId": { "$ref": "#/$defs/id" },
+        "baseManifestSha256": { "$ref": "#/$defs/sha256" },
+        "preserveBaseFinal": { "const": true },
+        "promoteCandidateAfterRollback": { "const": false },
+        "retainFailedEvidence": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "finalPromotion": {
+      "type": "object",
+      "required": ["requiresValidationPassed", "requiresAllInvariantsPassed", "requiresNoOutOfScopeChanges", "requiresSourceIntegrity"],
+      "properties": {
+        "requiresValidationPassed": { "const": true },
+        "requiresAllInvariantsPassed": { "const": true },
+        "requiresNoOutOfScopeChanges": { "const": true },
+        "requiresSourceIntegrity": { "const": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "type": "object",
+            "properties": { "kind": { "const": "version" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["scope"]
+      },
+      "then": {
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "type": { "const": "version.restore" } },
+              "required": ["type"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "jsonPointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+    },
+    "slideNumber": { "type": "integer", "minimum": 1, "maximum": 999 },
+    "slideNumbers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/slideNumber" }
+    },
+    "artifactKind": {
+      "enum": [
+        "deck_spec",
+        "slide_content",
+        "slide_image",
+        "speaker_notes",
+        "support_doc",
+        "support_pdf",
+        "source_info",
+        "design_profile",
+        "image_prompt",
+        "image_validation",
+        "manifest",
+        "package_zip"
+      ]
+    },
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "targetSlides", "artifactKinds", "allowUnlistedArtifacts"],
+          "properties": {
+            "kind": { "const": "local" },
+            "targetSlides": { "$ref": "#/$defs/slideNumbers" },
+            "artifactKinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+            "allowUnlistedArtifacts": { "const": false }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "artifactKinds", "confirmAllSlides"],
+          "properties": {
+            "kind": { "const": "deck" },
+            "artifactKinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+            "confirmAllSlides": { "const": true }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "restoreVersionId", "confirmRestore"],
+          "properties": {
+            "kind": { "const": "version" },
+            "restoreVersionId": { "$ref": "#/$defs/id" },
+            "confirmRestore": { "const": true }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "operationBase": {
+      "type": "object",
+      "required": ["operationId", "type", "targetSlides", "allowedFields", "preservedFields", "sourceConstraints", "affectedArtifacts", "dependsOn", "regenerateArtifactKinds", "preserveInvariantIds"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/id" },
+        "type": {
+          "enum": [
+            "text.replace",
+            "text.rewrite",
+            "visual.replace-image",
+            "visual.relayout-slide",
+            "visual.restyle-deck",
+            "slide.add",
+            "slide.remove",
+            "slide.move",
+            "source.correct",
+            "version.restore"
+          ]
+        },
+        "targetSlides": { "$ref": "#/$defs/slideNumbers" },
+        "allowedFields": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slideField" } },
+        "preservedFields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/slideField" } },
+        "sourceConstraints": {
+          "type": "object",
+          "required": ["mode", "requiredReferenceIds", "prohibitedReferenceIds"],
+          "properties": {
+            "mode": { "enum": ["preserve", "add", "remove", "correct", "not_applicable"] },
+            "requiredReferenceIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+            "prohibitedReferenceIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+          },
+          "additionalProperties": false
+        },
+        "affectedArtifacts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+        "dependsOn": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "regenerateArtifactKinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+        "preserveInvariantIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "textTarget": {
+      "type": "object",
+      "required": ["slideNumber", "artifactKind", "jsonPointer"],
+      "properties": {
+        "slideNumber": { "$ref": "#/$defs/slideNumber" },
+        "artifactKind": { "enum": ["deck_spec", "slide_content", "speaker_notes", "support_doc"] },
+        "jsonPointer": { "$ref": "#/$defs/jsonPointer" }
+      },
+      "additionalProperties": false
+    },
+    "slideField": {
+      "enum": [
+        "theme",
+        "role",
+        "layoutFamily",
+        "labels",
+        "title",
+        "keyMessage",
+        "bullets",
+        "speakerNotes",
+        "scriptCharacters",
+        "durationSeconds"
+      ]
+    },
+    "slideFieldMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[1-9][0-9]*$" },
+      "patternProperties": {
+        "^[1-9][0-9]*$": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slideField" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "target", "expectedValue", "replacementValue"],
+              "properties": {
+                "type": { "const": "text.replace" },
+                "target": { "$ref": "#/$defs/textTarget" },
+                "expectedValue": { "type": "string", "minLength": 1 },
+                "replacementValue": { "type": "string", "minLength": 1 }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "targets", "instruction", "sourceBound", "preserveFacts"],
+              "properties": {
+                "type": { "const": "text.rewrite" },
+                "targets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/textTarget" } },
+                "instruction": { "type": "string", "minLength": 3, "maxLength": 2000 },
+                "sourceBound": { "type": "boolean" },
+                "preserveFacts": { "const": true },
+                "maximumCharacters": { "type": "integer", "minimum": 1, "maximum": 10000 }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "slideNumber", "imageSlotId", "prompt", "preserveText", "preserveLayout"],
+              "properties": {
+                "type": { "const": "visual.replace-image" },
+                "slideNumber": { "$ref": "#/$defs/slideNumber" },
+                "imageSlotId": { "$ref": "#/$defs/id" },
+                "prompt": { "type": "string", "minLength": 3, "maxLength": 4000 },
+                "preserveText": { "const": true },
+                "preserveLayout": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "slideNumber", "layoutFamily", "preserveText", "preserveSourceReferences"],
+              "properties": {
+                "type": { "const": "visual.relayout-slide" },
+                "slideNumber": { "$ref": "#/$defs/slideNumber" },
+                "layoutFamily": { "enum": ["cover", "focus", "compare", "sequence", "evidence", "checklist", "action"] },
+                "preserveText": { "const": true },
+                "preserveSourceReferences": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "styleChanges", "preserveContent", "preserveSlideOrder"],
+              "properties": {
+                "type": { "const": "visual.restyle-deck" },
+                "styleChanges": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10,
+                  "items": {
+                    "type": "object",
+                    "required": ["token", "value"],
+                    "properties": {
+                      "token": { "enum": ["palette", "typography", "image_treatment", "icon_treatment", "spacing"] },
+                      "value": { "type": "string", "minLength": 1, "maxLength": 512 }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "preserveContent": { "const": true },
+                "preserveSlideOrder": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "insertAfterSlideNumber", "newSlide"],
+              "properties": {
+                "type": { "const": "slide.add" },
+                "insertAfterSlideNumber": { "$ref": "#/$defs/slideNumber" },
+                "newSlide": {
+                  "type": "object",
+                  "required": ["title", "theme", "role", "layoutFamily", "keyMessage", "bullets", "speakerNotes"],
+                  "properties": {
+                    "title": { "type": "string", "minLength": 1 },
+                    "theme": { "type": "string", "minLength": 1 },
+                    "role": { "enum": ["introduction", "overview", "understanding", "example", "practice", "summary", "action"] },
+                    "layoutFamily": { "enum": ["cover", "focus", "compare", "sequence", "evidence", "checklist", "action"] },
+                    "keyMessage": { "type": "string", "minLength": 1 },
+                    "bullets": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "type": "string", "minLength": 1 } },
+                    "speakerNotes": { "type": "string", "minLength": 1 },
+                    "sourceReferenceIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "slideNumber", "reindexFollowingSlides", "removeDependentArtifacts"],
+              "properties": {
+                "type": { "const": "slide.remove" },
+                "slideNumber": { "$ref": "#/$defs/slideNumber" },
+                "reindexFollowingSlides": { "const": true },
+                "removeDependentArtifacts": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "fromSlideNumber", "afterSlideNumber", "preserveContent", "reindexSlides"],
+              "properties": {
+                "type": { "const": "slide.move" },
+                "fromSlideNumber": { "$ref": "#/$defs/slideNumber" },
+                "afterSlideNumber": { "$ref": "#/$defs/slideNumber" },
+                "preserveContent": { "const": true },
+                "reindexSlides": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "sourceReferenceId", "claimTargets", "correction", "removeUnsupportedClaims"],
+              "properties": {
+                "type": { "const": "source.correct" },
+                "sourceReferenceId": { "$ref": "#/$defs/id" },
+                "claimTargets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/textTarget" } },
+                "correction": { "type": "string", "minLength": 1, "maxLength": 4000 },
+                "removeUnsupportedClaims": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/operationBase" },
+            {
+              "type": "object",
+              "required": ["type", "restoreVersionId", "restoreManifestSha256", "replaceCurrentCandidate"],
+              "properties": {
+                "type": { "const": "version.restore" },
+                "restoreVersionId": { "$ref": "#/$defs/id" },
+                "restoreManifestSha256": { "$ref": "#/$defs/sha256" },
+                "replaceCurrentCandidate": { "const": true }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "invariantBase": {
+      "type": "object",
+      "required": ["invariantId", "kind", "severity"],
+      "properties": {
+        "invariantId": { "$ref": "#/$defs/id" },
+        "kind": {
+          "enum": [
+            "unaffected.content-hash",
+            "unaffected.layout-hash",
+            "source.reference-preserved",
+            "artifact.synchronization",
+            "scope.boundary",
+            "render.integrity",
+            "final.immutable"
+          ]
+        },
+        "severity": { "const": "error" }
+      }
+    },
+    "invariant": {
+      "oneOf": [
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "artifactKind", "slideNumbers", "expectedSha256"],
+              "properties": {
+                "kind": { "const": "unaffected.content-hash" },
+                "artifactKind": { "enum": ["deck_spec", "slide_content", "speaker_notes", "support_doc"] },
+                "slideNumbers": { "$ref": "#/$defs/slideNumbers" },
+                "expectedSha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "slideNumbers", "expectedSha256"],
+              "properties": {
+                "kind": { "const": "unaffected.layout-hash" },
+                "slideNumbers": { "$ref": "#/$defs/slideNumbers" },
+                "expectedSha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "sourceReferenceIds"],
+              "properties": {
+                "kind": { "const": "source.reference-preserved" },
+                "sourceReferenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "artifactKinds", "synchronizedFields"],
+              "properties": {
+                "kind": { "const": "artifact.synchronization" },
+                "artifactKinds": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+                "synchronizedFields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["slide_number", "speaker_notes", "duration_seconds", "source_reference"] } }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "allowedArtifactKinds"],
+              "properties": {
+                "kind": { "const": "scope.boundary" },
+                "allowedSlideNumbers": { "$ref": "#/$defs/slideNumbers" },
+                "allowedArtifactKinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "slideNumbers", "requiredChecks"],
+              "properties": {
+                "kind": { "const": "render.integrity" },
+                "slideNumbers": { "$ref": "#/$defs/slideNumbers" },
+                "requiredChecks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["png_dimensions", "png_decodable", "not_blank", "text_not_clipped", "no_unintended_overlap"] } }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "allOf": [
+            { "$ref": "#/$defs/invariantBase" },
+            {
+              "type": "object",
+              "required": ["kind", "baseVersionId", "baseManifestSha256"],
+              "properties": {
+                "kind": { "const": "final.immutable" },
+                "baseVersionId": { "$ref": "#/$defs/id" },
+                "baseManifestSha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      ]
+    }
+  }
+}

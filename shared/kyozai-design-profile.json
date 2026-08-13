@@ -1,0 +1,73 @@
+{
+  "id": "kyozai-standard",
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1672,
+    "height": 941,
+    "ratio": "16:9"
+  },
+  "palette": {
+    "background": "#FFFFFF",
+    "text": "#0A0A0A",
+    "primary": "#075AC8",
+    "primaryDark": "#064897",
+    "secondaryBackground": "#F2F2F2",
+    "border": "#929292",
+    "muted": "#5D6673"
+  },
+  "typography": {
+    "family": "Noto Sans JP, Yu Gothic UI, Yu Gothic, sans-serif",
+    "titleWeight": 800,
+    "bodyWeight": 500,
+    "letterSpacing": 0
+  },
+  "spacing": {
+    "outerPercent": 6,
+    "titleRulePixels": 4,
+    "radiusPixels": 6
+  },
+  "rules": {
+    "oneThemePerSlide": true,
+    "titleIsConclusion": true,
+    "coverRequired": true,
+    "actionSlideRequired": true,
+    "speakerNotesOutsideCanvas": true,
+    "maxVisibleBullets": 4,
+    "minimumBodyPointEquivalent": 24,
+    "scriptCharactersPerMinute": 300,
+    "logoByDefault": false
+  },
+  "layoutFamilies": [
+    "cover",
+    "focus",
+    "compare",
+    "sequence",
+    "evidence",
+    "checklist",
+    "action"
+  ],
+  "layoutDefinitions": {
+    "common": {
+      "header": "slide number only at upper right",
+      "title": "single conclusion headline at upper left",
+      "titleRule": "full-width primary-blue rule directly below title",
+      "footer": "none",
+      "speakerNotes": "outside the 16:9 canvas"
+    },
+    "cover": "key message in the upper-middle, learning outcomes as two to four gray bars below",
+    "focus": "large blue key message on the left, supporting bullets on the right",
+    "compare": "two equal gray columns with content-specific blue labels and half of the bullets in each column",
+    "sequence": "three to four horizontal numbered gray steps connected from left to right",
+    "evidence": "large blue evidence statement on the left, supporting facts on the right",
+    "checklist": "two-column grid of gray checklist rows with blue checks",
+    "action": "single blue action statement on the left, numbered next actions on the right"
+  },
+  "avoid": [
+    "dark full-slide background",
+    "purple gradient as the main slide treatment",
+    "decorative stock imagery",
+    "the same layout on three consecutive slides",
+    "speaker notes inside the slide canvas",
+    "dense paragraphs"
+  ]
+}

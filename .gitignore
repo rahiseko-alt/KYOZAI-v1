@@ -45,3 +45,4 @@ outputs/**
 !outputs/tmp/.gitkeep
 !outputs/cache/
 !outputs/cache/.gitkeep
+.vercel

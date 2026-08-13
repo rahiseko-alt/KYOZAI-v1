@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-stage-ledger.schema.json",
+  "title": "KYOZAI Stage Ledger",
+  "type": "object",
+  "required": ["jobId", "processContract", "entries"],
+  "properties": {
+    "jobId": { "type": "string", "minLength": 1 },
+    "processContract": { "const": "kyozai-slide-process@1.0.0" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage", "status", "inputArtifactIds", "outputArtifactIds", "validationErrors", "retryCount"],
+        "properties": {
+          "stage": { "enum": ["source_ingest", "analysis", "slide_map", "script_timing", "content_freeze", "design", "image_generate", "image_validate", "package", "revision"] },
+          "status": { "enum": ["pending", "running", "passed", "failed", "skipped"] },
+          "startedAt": { "type": "string" },
+          "completedAt": { "type": "string" },
+          "inputArtifactIds": { "type": "array", "items": { "type": "string" } },
+          "outputArtifactIds": { "type": "array", "items": { "type": "string" } },
+          "validationErrors": { "type": "array", "items": { "type": "string" } },
+          "model": { "type": "string" },
+          "retryCount": { "type": "integer", "minimum": 0 },
+          "retryReason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

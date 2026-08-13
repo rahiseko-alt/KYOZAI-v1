@@ -1,0 +1,85 @@
+{
+  "id": "kyozai-slide-process",
+  "version": "1.0.0",
+  "sourceSkill": "kyozai-slide",
+  "designProfile": "kyozai-standard@1.0.0",
+  "scriptCharactersPerMinute": 300,
+  "stages": [
+    {
+      "id": "source_ingest",
+      "requiredOutputs": ["source_info", "source_hash"],
+      "gate": "Every extracted statement remains traceable to the original source."
+    },
+    {
+      "id": "analysis",
+      "requiredOutputs": ["audience", "problem", "outcome", "claim", "evidence", "examples", "final_action"],
+      "gate": "The teaching analysis is grounded in the normalized source."
+    },
+    {
+      "id": "slide_map",
+      "requiredOutputs": ["slide_map"],
+      "gate": "The title sequence forms a learning order with one theme per slide."
+    },
+    {
+      "id": "script_timing",
+      "requiredOutputs": ["speaker_notes", "script_characters", "duration_seconds"],
+      "gate": "Every duration is calculated from speaker notes at 300 characters per minute."
+    },
+    {
+      "id": "content_freeze",
+      "requiredOutputs": ["deck_spec", "semantic_validation"],
+      "gate": "All content checks pass before any image request starts."
+    },
+    {
+      "id": "design",
+      "requiredOutputs": ["design_profile", "layout_families", "image_prompts"],
+      "gate": "The shared profile and layout-family rules are satisfied."
+    },
+    {
+      "id": "image_generate",
+      "requiredOutputs": ["slide_images"],
+      "gate": "Each frozen slide is generated in a separate image request."
+    },
+    {
+      "id": "image_validate",
+      "requiredOutputs": ["image_validation", "montage"],
+      "gate": "Every final PNG passes image-level validation."
+    },
+    {
+      "id": "package",
+      "requiredOutputs": ["manifest", "package_zip"],
+      "gate": "The manifest matches the final artifact set."
+    },
+    {
+      "id": "revision",
+      "requiredOutputs": ["impact_scope", "revision_validation"],
+      "gate": "The source and previous revision are used and all affected stages pass again."
+    }
+  ],
+  "stageStatuses": ["pending", "running", "passed", "failed", "skipped"],
+  "revisionScopes": ["visual_only", "local_content", "structural"],
+  "textModelPolicy": {
+    "default": "gpt-5.5",
+    "allowed": ["gpt-5.5", "gpt-5.6-terra"],
+    "forbidden": ["gpt-5.6-sol"]
+  },
+  "imageModelPolicy": {
+    "default": "gpt-image-2-2026-04-21",
+    "quality": "medium",
+    "generationSize": "2048x1152",
+    "deliverySize": "1672x941",
+    "oneRequestPerSlide": true,
+    "automaticRetriesPerFailedSlide": 1
+  },
+  "requiredFinalArtifacts": [
+    "deck_spec",
+    "deck_content_and_script",
+    "source_info",
+    "image_prompts",
+    "image_validation",
+    "slide_images",
+    "montage",
+    "manifest",
+    "package_zip"
+  ]
+}

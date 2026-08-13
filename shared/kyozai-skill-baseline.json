@@ -1,0 +1,9 @@
+{
+  "algorithm": "sha256-normalized-lf",
+  "capturedAt": "2026-08-13",
+  "files": {
+    ".agents/skills/kyozai-slide/SKILL.md": "93fb91834f7dde5b48146aa4647d05b3fb3e3424a35aa90c34f0fe6fd2ed9754",
+    ".agents/skills/kyozai-slide/agents/openai.yaml": "5a19ebd3e753101053e9ca8938c3f3c4383b05c72cbd1d0db92f404bb6d2a19f",
+    ".agents/skills/kyozai-slide/references/kyozai-design-profile.json": "6a0247eb70fc97f6644a4c0dfb0eb756f8f2777412cadec532965862f93d061e"
+  }
+}

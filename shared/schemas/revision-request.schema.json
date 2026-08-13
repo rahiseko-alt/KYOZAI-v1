@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/revision-request.schema.json",
+  "title": "KYOZAI Revision Request",
+  "description": "An immutable user request to revise a completed KYOZAI version. It records intent and an explicit scope; it is not an executable patch.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "revisionId",
+    "jobId",
+    "baseVersionId",
+    "baseManifestSha256",
+    "createdAt",
+    "instruction",
+    "scope",
+    "preservationRequirements"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "kyozai-revision-request@1.0.0" },
+    "revisionId": { "$ref": "#/$defs/id" },
+    "jobId": { "$ref": "#/$defs/id" },
+    "baseVersionId": { "$ref": "#/$defs/id" },
+    "baseManifestSha256": { "$ref": "#/$defs/sha256" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "instruction": { "type": "string", "minLength": 3, "maxLength": 4000 },
+    "scope": { "$ref": "#/$defs/scope" },
+    "preservationRequirements": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "unaffected_content",
+          "unaffected_speaker_notes",
+          "unaffected_layout",
+          "source_references",
+          "slide_script_timing",
+          "design_profile",
+          "final_version_immutability"
+        ]
+      }
+    },
+    "requestedOperationTypes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/operationType" },
+      "description": "Optional caller-side constraint. The revision planner must not emit an operation type outside this list."
+    },
+    "sourceReferences": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" },
+      "description": "Required input references for a source.correct request; optional evidence hints for other requests."
+    },
+    "requestedBy": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "clientRequestId": { "$ref": "#/$defs/id" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "requestedOperationTypes": { "type": "array", "contains": { "const": "source.correct" } }
+        },
+        "required": ["requestedOperationTypes"]
+      },
+      "then": {
+        "properties": {
+          "sourceReferences": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          }
+        },
+        "required": ["sourceReferences"]
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "operationType": {
+      "enum": [
+        "text.replace",
+        "text.rewrite",
+        "visual.replace-image",
+        "visual.relayout-slide",
+        "visual.restyle-deck",
+        "slide.add",
+        "slide.remove",
+        "slide.move",
+        "source.correct",
+        "version.restore"
+      ]
+    },
+    "artifactKind": {
+      "enum": [
+        "deck_spec",
+        "slide_content",
+        "slide_image",
+        "speaker_notes",
+        "support_doc",
+        "support_pdf",
+        "source_info",
+        "design_profile",
+        "image_prompt",
+        "image_validation",
+        "manifest",
+        "package_zip"
+      ]
+    },
+    "slideNumbers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1, "maximum": 999 }
+    },
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "targetSlides", "artifactKinds", "allowUnlistedArtifacts"],
+          "properties": {
+            "kind": { "const": "local" },
+            "targetSlides": { "$ref": "#/$defs/slideNumbers" },
+            "artifactKinds": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/artifactKind" }
+            },
+            "allowUnlistedArtifacts": { "const": false }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "artifactKinds", "confirmAllSlides"],
+          "properties": {
+            "kind": { "const": "deck" },
+            "artifactKinds": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/artifactKind" }
+            },
+            "confirmAllSlides": { "const": true }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "restoreVersionId", "confirmRestore"],
+          "properties": {
+            "kind": { "const": "version" },
+            "restoreVersionId": { "$ref": "#/$defs/id" },
+            "confirmRestore": { "const": true }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

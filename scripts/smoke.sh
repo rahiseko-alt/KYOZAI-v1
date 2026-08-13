@@ -55,19 +55,29 @@ if curl -s -o /dev/null --max-time 2 "${BASE}/" 2>/dev/null; then
   exit 1
 fi
 
-# 独立したプロセスグループで起動し、その ID をファイルに残す。
-# pnpm だけを kill すると子の next-server が生き残り、次回の検査が古いサーバを
-# 叩いて「通ったように見える」事故が起きるため、グループごと落とせるようにする。
-setsid bash -c 'echo $$ > "$1"; exec bash "$3" --filter web start --port "$2"' \
-  _ "${WORK}/pgid" "${PORT}" "${PNPM_RUNNER}" >"${WORK}/server.log" 2>&1 &
+# Linuxでは独立プロセスグループ、Git BashではWindowsのプロセスツリーとして起動する。
+# pnpmだけを止めるとnext-serverが残るため、どちらも子孫をまとめて終了できるIDを保存する。
+PROCESS_MODE="group"
+if command -v setsid >/dev/null 2>&1; then
+  setsid bash -c 'echo $$ > "$1"; exec bash "$3" --filter web start --port "$2"' \
+    _ "${WORK}/pgid" "${PORT}" "${PNPM_RUNNER}" >"${WORK}/server.log" 2>&1 &
+else
+  PROCESS_MODE="windows-tree"
+  bash "${PNPM_RUNNER}" --filter web start --port "${PORT}" >"${WORK}/server.log" 2>&1 &
+  echo $! >"${WORK}/pgid"
+fi
 
 cleanup() {
   local pgid
   pgid="$(cat "${WORK}/pgid" 2>/dev/null || true)"
   if [ -n "${pgid}" ]; then
-    kill -TERM "-${pgid}" 2>/dev/null || true
-    sleep 1
-    kill -KILL "-${pgid}" 2>/dev/null || true
+    if [ "${PROCESS_MODE}" = "windows-tree" ]; then
+      taskkill.exe /PID "${pgid}" /T /F >/dev/null 2>&1 || true
+    else
+      kill -TERM "-${pgid}" 2>/dev/null || true
+      sleep 1
+      kill -KILL "-${pgid}" 2>/dev/null || true
+    fi
   fi
   rm -rf "${WORK}"
 }
@@ -86,7 +96,7 @@ if [ "${ready}" != "1" ]; then
 fi
 
 # 見出しのマーカーは apps/web/lib/content.ts の HOME_HEADING と同じ値。片方だけ変えると落ちる。
-MARKER="テンプレート起動確認"
+MARKER="資料を入れたら、教材準備は終わり。"
 
 echo "== 誰でも開けるページ =="
 # ブラウザと同じ GET で見る。HEAD では proxy が付けるヘッダが返らない。
