@@ -9,6 +9,26 @@ KYOZAI Slideは、台本や文字起こしを、講師がそのまま使える�
 
 旧 `teaching-slide-package` は移行元。新規実装と今後の拡張はこの `kyozai-slide` を正本として扱う。
 
+## APPとのデザイン同一性
+
+標準デザインの機械可読な正本は`references/kyozai-design-profile.json`
+（`kyozai-standard@1.0.0`）とする。リポジトリ内ではAPP配布用の
+`shared/kyozai-design-profile.json`と同一でなければならない。
+
+KYOZAI Skillと公開APPは、生成手段が異なっても次を共通にする。
+
+1. `deck-spec.json`へ`designProfile: "kyozai-standard@1.0.0"`を記録する。
+2. 各スライドへ`layoutFamily`を記録する。値は`cover`、`focus`、`compare`、`sequence`、`evidence`、`checklist`、`action`だけを使う。
+   `labels`も記録し、比較では「現状/改善後」「誤り/正しい対応」のような内容固有の2ラベルを入れる。
+3. 先頭は`cover`、末尾は`action`にする。
+4. 本文は内容の情報構造からlayout familyを選び、同じfamilyを3枚連続させない。
+5. 色、書体、余白、タイトル線、文字密度、講師ノートを画面外へ置く規則は共通profileを優先する。
+6. APPで作った同じ`deck-spec`をSkillへ渡した場合、文言とlayout familyを変えずに画像化する。
+7. Skillで作った`deck-spec`をAPPへ渡した場合も、同じprofileとlayout familyで表示できる構造にする。
+
+参考デザインが明示された案件では`kyozai-design`のprofileを使えるが、標準profileを暗黙に別配色へ
+変更しない。profileを変えた場合は、profile IDと変更理由を成果物へ残す。
+
 ## KYOZAI出力ライフサイクル
 
 生成物は下書きと清書を必ず分ける。SaaS化を前提に、ローカルパスは将来のオブジェクトストレージ構成の開発用アダプタとして扱う。
@@ -61,6 +81,7 @@ YouTube URLが入力された場合は、別Skillの存在を探し直さず、�
 9. **動画を識別できる出力**: 複数動画を連続処理しても混同しないよう、出力フォルダ、ZIP、レポート、画像一覧に開催日または収録日と動画固有slugを含める。
 10. **標準配色を固定**: 背景は白、本文は黒、強調は鮮明な青、補助は薄いグレーとする。ロゴや装飾的なブランド表現は、ユーザーが明示した場合だけ追加する。
 11. **表紙とCTAを必須化**: 全デッキの先頭に動画固有の表紙、末尾に受講後の具体的行動を示すCTAスライドを必ず入れる。
+12. **共通profileを守る**: 標準案件では`references/kyozai-design-profile.json`を読み、配色やlayout familyを独自解釈で置き換えない。
 
 ## ワークフロー
 
@@ -110,18 +131,22 @@ YouTube URLが入力された場合は、別Skillの存在を探し直さず、�
 | `number` | 連番 |
 | `title` | その1枚の結論。原則1行 |
 | `theme` | 1つだけ |
-| `role` | 導入、理解、証拠、ワーク、まとめ等 |
-| `visible` | 画面に出す文字、数字、図の関係 |
-| `layout` | 内容に適した構成案 |
-| `layout_family` | Focus、Compare、Sequence、Evidence、Quote、Demo等 |
-| `script` | 講師が話す文章 |
+| `role` | `introduction`、`overview`、`understanding`、`example`、`practice`、`summary`、`action` |
+| `layoutFamily` | 共通profileで定義した7種類 |
+| `labels` | 比較見出し。`compare`以外は空配列 |
+| `keyMessage` | そのスライドの中核表示文 |
+| `bullets` | 画面に出す2〜4個の短文 |
+| `speakerNotes` | 講師が話す文章 |
 
 タイトルだけを順番に読んでも、講義の論理が通るようにする。隣接スライドと同じ結論を言い換えただけの重複を残さない。
+
+標準profileでは`layoutFamily`に`cover`、`focus`、`compare`、`sequence`、`evidence`、
+`checklist`、`action`を使う。旧値を新規deck-specへ出さない。
 
 スライドマップには次の2枚を必ず含める。
 
 - `cover`: 動画・講座固有の題名と、必要なら短い副題を表示する先頭スライド
-- `cta`: 受講者が講義後に実行する具体的な1アクションを中心にした最終スライド。「ありがとうございました」だけで終えない
+- `action`: 受講者が講義後に実行する具体的な1アクションを中心にした最終スライド。「ありがとうございました」だけで終えない
 
 ### Step 4｜表示内容と講師台本を書く
 
@@ -235,7 +260,11 @@ radius: modest; do not card every item
 
 配色テーマ、アートディレクション、写真処理、装飾モチーフを毎回設計しない。動画の識別は表紙タイトルと出力名で行う。
 
-内容に応じた構成例:
+標準profileのlayout definitionを、APPとSkillで共通の具体構図として使う。標準profileを使う場合、
+同じfamilyを別の構図へ置き換えない。次の旧構成例は、参考デザインから別profileを明示作成する
+案件でのみ候補として扱う。
+
+別profileでの構成例:
 
 - 二者比較: 左右比較、Before/After
 - 手順: 横フロー、縦階段、タイムライン
@@ -256,7 +285,7 @@ radius: modest; do not card every item
 3. 各スライドは別々の `image_gen` 呼び出しで生成する。異なるテーマを1回の複数候補生成で代用しない。
 4. 各呼び出しへ、共通デザイントークンと当該スライドだけの確定仕様を渡す。
 5. 実際に渡した全プロンプトを `image-prompts.json` へスライド番号と対応づけて保存する。
-6. 組み込み出力を最終パッケージの `images/cover.png`、`images/slide-NN.png`、`images/cta.png` へコピーし、生成画像を既定保存先だけに残さない。
+6. 組み込み出力を最終パッケージの `images/cover.png`、`images/slide-NN.png`、`images/action.png` へコピーし、生成画像を既定保存先だけに残さない。
 7. ユーザーがチャット表示を求めた画像は、`generatedImage(result)` で実画像として返す。ローカルパスだけを表示結果にしない。
 8. 日本語の誤字、余計な文字、構成崩れがあれば、その画像だけを対象に1変更ずつ再生成する。
 
@@ -345,7 +374,7 @@ outputs/drafts/{job_id}/
 │   ├── cover.png
 │   ├── slide-01.png
 │   ├── ...
-│   └── cta.png
+│   └── action.png
 ├── source/
 │   ├── video.info.json
 │   └── video.ja-orig.json3
@@ -362,7 +391,7 @@ outputs/final/{job_id}/
 │   ├── cover.png
 │   ├── slide-01.png
 │   ├── ...
-│   └── cta.png
+│   └── action.png
 ├── deck-spec.json
 ├── deck-content-and-script.txt
 ├── source-info.json

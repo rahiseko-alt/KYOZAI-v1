@@ -19,7 +19,7 @@
     },
     "product": {
       "type": "string",
-      "enum": ["kyozai-slide", "kyozai-support", "kyozai-design", "kyozai-movie", "kyozai-orchestrator"]
+      "enum": ["kyozai-slide", "kyozai-support", "kyozai-design", "kyozai-movie", "kyozai-orchestrator", "kyozai-revise"]
     },
     "status": {
       "type": "string",

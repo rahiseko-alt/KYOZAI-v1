@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-deck-spec.schema.json",
+  "title": "KYOZAI Deck Spec",
+  "type": "object",
+  "required": ["processContract", "designProfile", "title", "targetAudience", "slides", "totalScriptCharacters", "totalDurationSeconds"],
+  "properties": {
+    "processContract": { "const": "kyozai-slide-process@1.0.0" },
+    "designProfile": { "const": "kyozai-standard@1.0.0" },
+    "title": { "type": "string", "minLength": 1 },
+    "targetAudience": { "type": "string", "minLength": 1 },
+    "totalScriptCharacters": { "type": "integer", "minimum": 0 },
+    "totalDurationSeconds": { "type": "integer", "minimum": 0 },
+    "slides": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["number", "title", "theme", "role", "layoutFamily", "labels", "keyMessage", "bullets", "speakerNotes", "scriptCharacters", "durationSeconds"],
+        "properties": {
+          "number": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "theme": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["introduction", "overview", "understanding", "example", "practice", "summary", "action"] },
+          "layoutFamily": { "enum": ["cover", "focus", "compare", "sequence", "evidence", "checklist", "action"] },
+          "labels": { "type": "array", "items": { "type": "string", "minLength": 1 }, "maxItems": 2 },
+          "keyMessage": { "type": "string", "minLength": 1 },
+          "bullets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 4 },
+          "speakerNotes": { "type": "string" },
+          "scriptCharacters": { "type": "integer", "minimum": 0 },
+          "durationSeconds": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

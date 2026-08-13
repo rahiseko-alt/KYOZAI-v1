@@ -25,6 +25,12 @@
         "motion_storyboard",
         "video_prompt",
         "video",
+        "revision_request",
+        "revision_plan",
+        "revision_patch",
+        "revision_impact_report",
+        "revision_validation",
+        "revision_retry_log",
         "zip",
         "validation"
       ]

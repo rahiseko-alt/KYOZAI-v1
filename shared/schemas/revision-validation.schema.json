@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/revision-validation.schema.json",
+  "title": "KYOZAI Revision Validation",
+  "description": "The immutable execution record for a revision plan. A candidate can be promoted only when every required invariant, scope check, and rendered-slide check passes.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "validationId",
+    "revisionId",
+    "planId",
+    "jobId",
+    "baseVersionId",
+    "candidateVersionId",
+    "baseManifestSha256",
+    "candidateManifestSha256",
+    "validatedAt",
+    "status",
+    "operationResults",
+    "phase0ValidatorReport",
+    "invariantResults",
+    "scopeValidation",
+    "renderValidation",
+    "retryLog",
+    "promotion",
+    "rollback"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "kyozai-revision-validation@1.0.0" },
+    "validationId": { "$ref": "#/$defs/id" },
+    "revisionId": { "$ref": "#/$defs/id" },
+    "planId": { "$ref": "#/$defs/id" },
+    "jobId": { "$ref": "#/$defs/id" },
+    "baseVersionId": { "$ref": "#/$defs/id" },
+    "candidateVersionId": { "$ref": "#/$defs/id" },
+    "baseManifestSha256": { "$ref": "#/$defs/sha256" },
+    "candidateManifestSha256": { "$ref": "#/$defs/sha256" },
+    "validatedAt": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["passed", "failed", "rolled_back"] },
+    "operationResults": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["operationId", "type", "status", "affectedArtifactIds"],
+        "properties": {
+          "operationId": { "$ref": "#/$defs/id" },
+          "type": { "$ref": "#/$defs/operationType" },
+          "status": { "enum": ["applied", "failed", "rolled_back", "skipped"] },
+          "affectedArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+          "failureCodes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/failureCode" } },
+          "evidenceArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+            "then": { "required": ["failureCodes"], "properties": { "failureCodes": { "type": "array", "minItems": 1 } } },
+            "else": { "properties": { "failureCodes": { "type": "array", "maxItems": 0 } } }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "phase0ValidatorReport": { "$ref": "#/$defs/phase0ValidatorReport" },
+    "invariantResults": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/invariantResult" }
+    },
+    "scopeValidation": {
+      "type": "object",
+      "required": ["status", "targetSlides", "allowedArtifactKinds", "changedArtifactKinds", "outOfScopeArtifactIds", "outOfScopeSlideNumbers"],
+      "properties": {
+        "status": { "enum": ["passed", "failed"] },
+        "targetSlides": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 999 } },
+        "allowedArtifactKinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+        "changedArtifactKinds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+        "outOfScopeArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "outOfScopeSlideNumbers": { "type": "array", "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 999 } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "outOfScopeArtifactIds": { "type": "array", "maxItems": 0 },
+              "outOfScopeSlideNumbers": { "type": "array", "maxItems": 0 }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "renderValidation": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slideNumber", "artifactId", "status", "width", "height", "checks"],
+        "properties": {
+          "slideNumber": { "type": "integer", "minimum": 1, "maximum": 999 },
+          "artifactId": { "$ref": "#/$defs/id" },
+          "status": { "enum": ["passed", "failed"] },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "checks": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["png_dimensions", "png_decodable", "not_blank", "text_not_clipped", "no_unintended_overlap"] }
+          },
+          "failureCodes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/failureCode" } },
+          "evidenceArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+            "then": { "required": ["failureCodes"], "properties": { "failureCodes": { "type": "array", "minItems": 1 } } },
+            "else": { "properties": { "failureCodes": { "type": "array", "maxItems": 0 } } }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "retryLog": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["attempt", "startedAt", "completedAt", "status", "scopePreserved"],
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "startedAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": "string", "format": "date-time" },
+          "status": { "enum": ["passed", "failed"] },
+          "scopePreserved": { "const": true },
+          "failureCodes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/failureCode" } }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+            "then": { "required": ["failureCodes"], "properties": { "failureCodes": { "type": "array", "minItems": 1 } } },
+            "else": { "properties": { "failureCodes": { "type": "array", "maxItems": 0 } } }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "required": ["status", "promotedVersionId"],
+      "properties": {
+        "status": { "enum": ["promoted", "blocked"] },
+        "promotedVersionId": {
+          "anyOf": [
+            { "$ref": "#/$defs/id" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "rollback": {
+      "type": "object",
+      "required": ["status", "restoredVersionId", "restoredManifestSha256"],
+      "properties": {
+        "status": { "enum": ["not_needed", "executed"] },
+        "restoredVersionId": { "$ref": "#/$defs/id" },
+        "restoredManifestSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "promotion": { "type": "object", "properties": { "status": { "const": "promoted" }, "promotedVersionId": { "type": "string" } }, "required": ["status", "promotedVersionId"] },
+          "rollback": { "type": "object", "properties": { "status": { "const": "not_needed" } }, "required": ["status"] },
+          "scopeValidation": { "type": "object", "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+          "phase0ValidatorReport": { "type": "object", "properties": { "valid": { "const": true }, "status": { "const": "passed" } }, "required": ["valid", "status"] },
+          "operationResults": { "type": "array", "not": { "contains": { "type": "object", "properties": { "status": { "enum": ["failed", "rolled_back"] } }, "required": ["status"] } } },
+          "invariantResults": { "type": "array", "not": { "contains": { "type": "object", "properties": { "status": { "const": "failed" } }, "required": ["status"] } } },
+          "renderValidation": { "type": "array", "not": { "contains": { "type": "object", "properties": { "status": { "const": "failed" } }, "required": ["status"] } } },
+          "retryLog": { "type": "array", "contains": { "type": "object", "properties": { "status": { "const": "passed" } }, "required": ["status"] } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["failed", "rolled_back"] } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "promotion": { "type": "object", "properties": { "status": { "const": "blocked" }, "promotedVersionId": { "type": "null" } }, "required": ["status", "promotedVersionId"] },
+          "rollback": { "type": "object", "properties": { "status": { "const": "executed" } }, "required": ["status"] }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "operationType": {
+      "enum": [
+        "text.replace",
+        "text.rewrite",
+        "visual.replace-image",
+        "visual.relayout-slide",
+        "visual.restyle-deck",
+        "slide.add",
+        "slide.remove",
+        "slide.move",
+        "source.correct",
+        "version.restore"
+      ]
+    },
+    "artifactKind": {
+      "enum": [
+        "deck_spec",
+        "slide_content",
+        "slide_image",
+        "speaker_notes",
+        "support_doc",
+        "support_pdf",
+        "source_info",
+        "design_profile",
+        "image_prompt",
+        "image_validation",
+        "manifest",
+        "package_zip"
+      ]
+    },
+    "failureCode": {
+      "enum": [
+        "provider_timeout",
+        "provider_transient_error",
+        "render_invalid",
+        "image_blank",
+        "text_clipped",
+        "overlap_detected",
+        "visual_validation_failed",
+        "scope_violation",
+        "content_hash_mismatch",
+        "layout_hash_mismatch",
+        "source_reference_mismatch",
+        "artifact_sync_mismatch",
+        "operation_precondition_failed"
+      ]
+    },
+    "invariantResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["invariantId", "kind", "status", "artifactKind", "slideNumbers", "expectedSha256", "actualSha256"],
+          "properties": {
+            "invariantId": { "$ref": "#/$defs/id" },
+            "kind": { "enum": ["unaffected.content-hash", "unaffected.layout-hash"] },
+            "status": { "enum": ["passed", "failed"] },
+            "artifactKind": { "$ref": "#/$defs/artifactKind" },
+            "slideNumbers": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 999 } },
+            "expectedSha256": { "$ref": "#/$defs/sha256" },
+            "actualSha256": { "$ref": "#/$defs/sha256" },
+            "evidenceArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["invariantId", "kind", "status", "expectedSourceReferenceIds", "actualSourceReferenceIds"],
+          "properties": {
+            "invariantId": { "$ref": "#/$defs/id" },
+            "kind": { "const": "source.reference-preserved" },
+            "status": { "enum": ["passed", "failed"] },
+            "expectedSourceReferenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+            "actualSourceReferenceIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+            "evidenceArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["invariantId", "kind", "status", "artifactKinds", "synchronizedFields"],
+          "properties": {
+            "invariantId": { "$ref": "#/$defs/id" },
+            "kind": { "const": "artifact.synchronization" },
+            "status": { "enum": ["passed", "failed"] },
+            "artifactKinds": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/artifactKind" } },
+            "synchronizedFields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["slide_number", "speaker_notes", "duration_seconds", "source_reference"] } },
+            "evidenceArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["invariantId", "kind", "status", "baseVersionId", "baseManifestSha256", "actualBaseManifestSha256"],
+          "properties": {
+            "invariantId": { "$ref": "#/$defs/id" },
+            "kind": { "const": "final.immutable" },
+            "status": { "enum": ["passed", "failed"] },
+            "baseVersionId": { "$ref": "#/$defs/id" },
+            "baseManifestSha256": { "$ref": "#/$defs/sha256" },
+            "actualBaseManifestSha256": { "$ref": "#/$defs/sha256" },
+            "evidenceArtifactIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "phase0ValidatorReport": {
+      "type": "object",
+      "required": ["version", "valid", "status", "targetSlides", "summary", "changes", "violations"],
+      "properties": {
+        "version": { "const": "kyozai-revise-validation@0.1.0" },
+        "valid": { "type": "boolean" },
+        "status": { "enum": ["passed", "failed"] },
+        "targetSlides": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 999 } },
+        "summary": {
+          "type": "object",
+          "required": ["changedFields", "violations"],
+          "properties": {
+            "changedFields": { "type": "integer", "minimum": 0 },
+            "violations": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["scope", "field"],
+                "properties": { "scope": { "const": "deck" }, "field": { "type": "string", "minLength": 1 } },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["scope", "slideNumber", "field"],
+                "properties": {
+                  "scope": { "const": "slide" },
+                  "slideNumber": { "type": "integer", "minimum": 1, "maximum": 999 },
+                  "field": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "scope"],
+            "properties": {
+              "code": {
+                "enum": [
+                  "UNAUTHORIZED_FIELD_CHANGE",
+                  "SLIDE_ORDER_CHANGED",
+                  "SLIDE_ADDED",
+                  "TARGET_SLIDE_MISSING",
+                  "OUT_OF_SCOPE_SLIDE_REMOVED",
+                  "OUT_OF_SCOPE_DISPLAY_TEXT_CHANGED",
+                  "OUT_OF_SCOPE_SPEAKER_NOTES_CHANGED",
+                  "TARGET_INVARIANT_VIOLATION"
+                ]
+              },
+              "scope": { "enum": ["deck", "slide"] },
+              "slideNumber": { "type": "integer", "minimum": 1, "maximum": 999 },
+              "field": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "valid": { "const": true } }, "required": ["valid"] },
+          "then": {
+            "properties": {
+              "status": { "const": "passed" },
+              "summary": { "type": "object", "properties": { "violations": { "const": 0 } }, "required": ["violations"] },
+              "violations": { "type": "array", "maxItems": 0 }
+            }
+          },
+          "else": { "properties": { "status": { "const": "failed" } } }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

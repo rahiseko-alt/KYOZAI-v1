@@ -1220,3 +1220,203 @@ PR #55 でも、全体レビューが返る前にマージされた。前項（�
 
 対処：`scripts/prod-demo-check.sh` の見出しを実装に合わせ（検査を緩めたのではなく、
 画面の名前の変更に追随させた）、この結合を `AGENTS.md` に3件目として明記した。
+
+## 2026-08-12 リポジトリ取り込み後に handoff を読まず、利用者に指摘された
+
+指定リポジトリを取り込んだ直後、`AGENTS.md` と `docs/handoff.md` を読む前に
+「チェックイン対象の変更はない」とだけ返した。`AGENTS.md` には、実装の前に
+`docs/design.md` を読むこと、セッション状態は `docs/handoff.md` にあることが明記されている。
+今回の `docs/handoff.md` には、KYOZAI系Skillの正本化、次回やること、削除してよい出力と
+削除してはいけない出力の区別が書かれていた。
+
+**リポジトリを pull / clone / fetch した直後は、状態確認だけの依頼に見えても
+`AGENTS.md` と `docs/handoff.md` を先に読む。** 作業ツリーがクリーンかどうかは
+git の状態で分かるが、次に何を守るべきかは引継ぎにある。
+
+## 2026-08-12 Vercelへのmonorepo配備で、ローカル前提の設定を順番に露出させた
+
+公開体験版の初回配備では、アプリ単体配備にlockfileが無い、ルート配備ではNext.jsを
+検出できない、アプリ単体ではルートの`tsconfig.base.json`を参照できない、という失敗が
+順に発生した。いずれも、ローカルmonorepoでは存在する親ディレクトリとworkspace情報が、
+Vercelへ送る配備単位にも存在すると仮定したことが原因だった。
+
+対処として、`apps/web`を単独で配備できるように`tsconfig`を自己完結させ、Vercel用の
+install/build設定を`apps/web/vercel.json`へ置いた。Next.jsのTurbopack rootも、ローカルと
+Vercelで明示的に切り替えた。
+
+**配備単位を決めたら、そのディレクトリだけを送ってbuildできるか先に確認する。**
+monorepoのローカルbuild成功は、サブディレクトリ単体配備の証明にならない。
+
+## 2026-08-12 Windows上のpnpm 10.33.0が依存リンク作成中に異常終了した
+
+`corepack pnpm@10.33.0 install`は、package取得後のリンク作成中にWindows例外
+`-1073740791`で終了し、`apps/web/node_modules/.bin`が作られなかった。表示上は
+通常の進捗で止まり、PowerShellからは原因行が出なかった。pnpm 11.16.0で同じlockfileを
+installすると復旧し、その後の型検査、Lint、単体テスト、build、E2Eは成功した。
+
+VercelのLinux buildではpnpm 10.33.0が成功しているため、現時点ではWindowsローカル固有の
+互換問題として扱う。**installが短時間で終了しても、`.bin`と実コマンドの存在まで確認する。**
+
+## 2026-08-12 OpenAIの途中終了JSONを、そのまま利用者へ表示した
+
+公開体験版の教材生成で`Unterminated string in JSON`が画面に表示された。OpenAIの
+Structured Outputsを使っていても、`max_output_tokens`到達などでresponseが`incomplete`に
+なる場合がある。実装は`status`と`incomplete_details`を見ず、途中までの`output_text`を
+直接`JSON.parse`していた。さらにrouteが例外文をそのままJSON errorへ入れたため、内部の
+parserエラーが利用者に露出した。
+
+対処として、構造化応答の`status`、空出力、JSON解析結果を検査し、途中終了・壊れたJSON・
+一時的な429/5xx・通信失敗を1回だけ自動再試行するようにした。教材生成の出力枠を
+8,000から16,000 tokenへ増やし、再試行時は最大32,000 tokenとした。再試行後も失敗した場合は
+parser文ではなく、日本語の再試行案内だけを返す。途中JSONと連続不正JSONの単体テストも追加した。
+
+**JSON Schema指定は、完全なJSON受信を保証しない。** 構造検証の前にresponse完了状態と
+JSONの完全性を検査し、低水準例外を利用者向けAPIへ渡さない。
+
+## 2026-08-12 Skillのデザイン契約を接続せず、APPの教材を完成扱いした
+
+公開APPではブランドロゴと入力UIを整えたが、教材生成AIへ渡していたのは1スライド1テーマ等の
+短い一般指示だけだった。`kyozai-slide` Skillが定める白・黒・青、内容別レイアウト、表紙とCTA、
+300文字/分、画像検証等はAPPのSchemaとレンダラーへ接続していなかった。さらにHTML教材を
+濃紺全面の単一テンプレートで出しながら、公開時に「完成機能」と報告した。
+
+原因は、APPのブランドUIと、利用者が受け取る教材そのもののデザインを同じ課題として扱わなかった
+ことにある。Skill文書を読んでいても、機械契約へ移植しなければAPIはその規則を知らない。
+
+対処として`kyozai-standard@1.0.0`の共通profileを作り、Skill・shared・APPの3コピーをテストで
+同一検査するようにした。教材Schemaへprofile ID、layout family、比較labelsを追加し、APPの
+プレビューとHTML出力を白・黒・青の内容別レンダラーへ変更した。
+
+**ブランドの画面を作ることと、ブランドどおりの成果物を作ることは別である。** 完成扱いの前に、
+正本Skillの必須規則がprompt、Schema、renderer、validator、exportへ到達しているか確認する。
+
+## 2026-08-12 共通デザイン版の本番生成が、再試行込みで240秒を超えた
+
+共通profileと拡張Schemaを本番配備した後、実APIで生成・修正を連続確認したところ、生成APIが
+クライアントの240秒timeoutへ到達した。生成は1回最大110秒を2回試行する設定で、Vercel処理と
+通信の余白を含めるとrouteの240秒上限とほぼ同じだった。ローカルで1回成功したことを、
+本番の最悪時間の証明として扱っていた。
+
+生成の1試行を78秒、最大2回の156秒へ制限し、route上限との間に十分な余白を設けた。
+**外部APIのtimeout合計は、route上限と同じにしない。** 再試行、JSON処理、通信に必要な余白を
+先に確保し、本番URLで最悪経路を確認する。
+
+## 2026-08-12 教材生成が78秒の応答上限へ2回連続で到達した
+
+公開体験版で「AIの応答が途中で終了しました」と表示された。本番ログではOpenAIへの生成が
+`TimeoutError`となり、78秒の試行を2回とも完了できていなかった。利用者の入力が短すぎる問題では
+ないのに、案内文は入力を短くするよう求めており、原因と対処が一致していなかった。
+
+教材一式を非ストリーミングで待ち、指定研修時間を講師ノートの長さだけで満たそうとしていたため、
+構造化JSONが必要以上に長くなった。対処としてResponses APIをSSEで受信し、完成イベントまで
+JSONを組み立てるようにした。講師ノートは各スライド120〜240文字の進行要点とし、問いかけ・
+演習時間はscenarioへ配分する。生成は1試行105秒、最大2回とし、出力上限は初回10,000、
+再試行16,000 tokenへ調整した。エラー案内から入力短縮の要求を削除し、試行名と経過時間を
+秘密を含まない構造化ログへ残すようにした。
+
+**同期生成の信頼性はtoken上限だけでなく、応答時間と受信方式で設計する。** 利用者へ入力変更を
+求める前に、外部APIのtimeout、出力量、ストリーム完了状態を本番ログで確認する。
+
+独立レビューで、105秒を2回許可するだけではURLの転送取得を含めた最悪時間が240秒を越えると
+判明した。route開始時に225秒の共通締切を作り、URLのDNS・fetch・OpenAIの各処理へ渡した。
+残り5秒を切る通信は開始せず、各AI試行のtimeoutも残り時間内へ縮める。JSON Schemaには表せない
+表紙・行動スライド位置等のruntime検証失敗も同じ試行ループで再生成するようにした。
+
+## 2026-08-12 production buildとE2Eを同じ`.next`へ同時実行した
+
+時間短縮のためbuildとPlaywright E2Eを並列実行したところ、buildが`.next`を再作成中にE2Eの
+production serverが起動し、`Could not find a production build`で失敗した。さらに先のbuildが
+終了する前に再実行し、`Another next build process is already running`も発生した。
+
+残存build processと`BUILD_ID`を確認し、build、E2Eの順に直列実行して双方成功した。
+**同じ`.next`を読む検証と書き換えるbuildは並列化しない。**
+
+## 2026-08-13 「同じ工程」を「生成結果の完全一致」と解釈した
+
+利用者の「SkillとAPPを揃える」という指示を、同じ入力から同じPNG、同じartifact hashを得る要求と
+解釈し、共通jobで1回だけ生成する計画を作った。利用者が求めていたのは、AI生成結果の完全一致ではなく、
+入力取得、教材設計、内容凍結、画像生成、画像QA、修正、納品を同じ水準で行うことだった。
+
+AI生成物は独立実行ごとに変わる。完全一致を前提にすると、現行Skillを変更しないという条件と衝突し、
+APPへ必要な工程を実装する本来の課題から外れる。前回監査で「同一job、同一PNG、Skill/APP間hash一致」を
+必須とした判断は撤回する。
+
+今後「同じ」「揃える」という指示を設計へ落とす際は、結果、工程、品質基準、UI、データ形式のどの軸を
+指すかを区別する。KYOZAIでは工程同等性をstage ledgerと工程契約テストで証明し、生成結果のpixel比較を
+合格条件にしない。APP内部のプレビューと納品物の一致は、別の内部整合性として引き続き検査する。
+
+## 2026-08-13 Skill初期化のUI説明文字数を満たさなかった
+
+`kyozai-revise`を`init_skill.py`で初期化した際、`short_description`を21文字で渡し、規定の
+25〜64文字を満たさずメタデータ生成が失敗した。Skill本体のscaffoldは作成済みで、秘密情報の露出や
+既存ファイルの破損はない。説明文を規定内へ直し、`generate_openai_yaml.py`で不足したメタデータだけを
+生成する。今後は初期化前にUI文字列の文字数を確認する。
+
+同じ作業で`quick_validate.py`をWindows既定localeのまま実行し、UTF-8の日本語`SKILL.md`をCP932で
+読もうとして`UnicodeDecodeError`になった。ファイル自体はUTF-8であり、`python -X utf8`で再検証する。
+日本語Skillの公式validatorはWindowsではUTF-8モードを明示する。
+
+50件fixture用validatorの初回実行では、計画書の分類名からカテゴリIDを推測して固定し、fixtureで
+確定した`add-remove-move`と`source-correction-and-deck-design`に一致せず失敗した。fixtureを変更せず、
+validatorを実データのIDへ合わせた。Schemaやfixtureを検査するコードでは、表示名から内部IDを推測しない。
+
+Revision Schemaの確認時、Windowsの`rg`へ`shared/schemas/revision-*.schema.json`を直接渡し、globが
+展開されずパス構文エラーになった。ファイル変更や検証結果への影響はない。Windowsでは検索directoryと
+`-g 'revision-*.schema.json'`を分けて指定する。
+
+Schemaの実コンパイル検証にPythonの`jsonschema`を使えるか確認したが、環境へ未導入で
+`ModuleNotFoundError`になった。構文確認だけで完了扱いにせず、計画書で採用候補としていたAjv 8を
+共通開発依存へ追加し、Draft 2020-12としてコンパイル検証する。
+
+Ajv 8の初回厳格コンパイルで、Revision Schemaの条件分岐内にある`contains`と`properties`へ
+対象型が明記されておらず、`strictTypes`違反を検出した。validatorを緩めず、条件内にも`array`と
+`object`を明記してSchema側を修正した。JSONとして読めることだけをSchema合格条件にしない。
+
+続く厳格コンパイルで、`source.correct`時に必須化する`sourceReferences`が条件ブロック内で
+未定義として`strictRequired`違反になった。親Schemaに定義があっても条件側の検査範囲で曖昧にせず、
+同じ型と参照を条件ブロックへ明示した。
+
+Revision Planの`version.restore`条件にも、`scope`のobject型と`operations`のarray型、itemsのobject型が
+条件ブロック内で不足していたため`strictTypes`違反になった。条件で使うkeywordの対象型を同じ場所へ
+明示した。
+
+`oneOf`分岐へのobject型一括補正の初回コマンドでは、PowerShellの単一引用文字列内で引用符を
+二重化し、正規表現が一致せず0件で停止した。書込み前に停止したためファイル変更はない。PowerShellの
+文字列規則に合わせてpatternを修正した。
+
+Revision Validationにも、条件内の`failureCodes`とscope外配列へarray型がなく、Ajvの厳格コンパイルで
+検出された。条件側へ型を追加し、string/nullのunionとpatternの組合せは`anyOf`へ分離した。
+
+差分validatorレポートの`valid: true`条件でも、`summary`と`violations`の型が条件ブロック内に
+明示されておらず厳格コンパイルが停止した。objectとarrayを明示し、違反0件という条件を維持した。
+
+Revise統合後、6検証を1つの並列tool callへまとめたところ、外側の64秒制限へ到達し、個別結果を
+回収できなかった。検証の合否は不明なので完了扱いにせず、validator群とtypecheck、lint、testを
+個別に再実行する。長い検証束は1 callの共通timeoutへまとめない。
+
+production build後のsmoke初回は既定ポート3123が既存プロセスに使われており、安全チェックで停止した。
+既存プロセスは停止せず、`SMOKE_PORT=3124`で再実行する。
+
+`SMOKE_PORT=3124`でGit Bashから再実行したsmokeは無出力のまま120秒を超え、外側timeoutで停止した。
+停止後に3124のlistenは残っていない。ReviseではAPPコードを変更しておらず、typecheck、lint、既存test、
+production buildは成功しているため、smokeはWindows/Git Bash起動経路の未解消事項として分離する。
+
+## 2026-08-13 Phase 0確定前の依存監査とWindows smokeが失敗した
+
+`pnpm audit --audit-level moderate`で、直接開発依存の`ajv 8.17.1`に`$data`利用時のReDoSが
+報告された。Schema検証を削除・緩和せず、修正版`8.18.0`へ更新して監査を再実行し、既知脆弱性0件を
+確認した。
+
+Windowsで`bash scripts/smoke.sh`を実行するとSystem32のWSL launcherが選ばれ、pnpm引数が壊れて
+Next.jsの子プロセスだけが残った。残存processがこのリポジトリの`next start --port 3123`であることを
+確認して停止した。Git Bashを明示した再実行では`setsid`未導入で起動できなかったため、Linuxでは従来の
+process group、Git BashではWindows process treeを終了する分岐を追加した。受け入れ判定は変更せず、
+修正後のHTTP smokeは全項目成功した。
+
+Phase 0 PRのCodeQLは、URL本文からscriptを除く正規表現が空白入り終了タグ`</script >`を
+取り逃すとして失敗した。属性付き開始タグと空白入り終了タグを扱う抽出関数へ修正し、script/styleの
+内容が教材本文へ入らない回帰テストを追加した。正規表現の警告を無視せず、入力例をテストで固定する。
+
+上記の正規表現修正後も、CodeQLは属性のような文字を含む不正終了タグを取り逃すとして再度失敗した。
+HTML構造を正規表現で扱う方針が誤りだったため、`htmlparser2`でDOMを構築し、script/style要素を除去して
+text contentを取得する方式へ置き換えた。不正終了タグを含む入力でもscript本文を返さないテストを追加した。

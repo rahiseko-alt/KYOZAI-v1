@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "fixtures": [
+    {
+      "id": "direct-input-foundations",
+      "inputType": "input_text",
+      "purpose": "Verify the complete process with a short original training brief."
+    },
+    {
+      "id": "long-pdf-onboarding",
+      "inputType": "pdf",
+      "purpose": "Verify chunk traceability and complete-source analysis."
+    },
+    {
+      "id": "youtube-captioned-training",
+      "inputType": "youtube",
+      "purpose": "Verify metadata, Japanese captions, and learning-order reconstruction."
+    },
+    {
+      "id": "reference-design-training",
+      "inputType": "reference_image",
+      "purpose": "Verify reference extraction without copying the source design."
+    },
+    {
+      "id": "natural-language-revision",
+      "inputType": "revision",
+      "purpose": "Verify impact scope, source grounding, and affected-stage replay."
+    }
+  ]
+}

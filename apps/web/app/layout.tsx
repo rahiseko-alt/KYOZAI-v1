@@ -9,7 +9,8 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Template",
+  title: "KYOZAI | 資料を、教えられる教材へ。",
+  description: "資料から研修スライド、講師シナリオ、FAQ、確認テストをAIでまとめて作成します。",
 };
 
 export default function RootLayout({

@@ -4,7 +4,7 @@
 // HOME_HEADING はトップページの見出しであると同時に、CI の起動スモーク
 // （scripts/smoke.sh の MARKER）が本文から探すマーカーでもある。変えるときは
 // 両方を同時に直す（詳細は AGENTS.md「コマンド」節の「注意（値が結合している箇所）」）。
-export const HOME_HEADING = "テンプレート起動確認";
+export const HOME_HEADING = "資料を入れたら、教材準備は終わり。";
 
 /**
  * 見出しの下に添えるひとことを組み立てる。

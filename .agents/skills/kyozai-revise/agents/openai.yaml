@@ -1,0 +1,4 @@
+interface:
+  display_name: "KYOZAI Revise"
+  short_description: "完成教材の指定箇所だけを安全に修正し、差分検証と復元を行う"
+  default_prompt: "Use $kyozai-revise to apply this revision without changing unaffected slides."

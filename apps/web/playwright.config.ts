@@ -28,11 +28,10 @@ export default defineConfig({
     // サーバ側の例外（Server Component / Server Action のエラー）をテストのログに出す。
     stdout: "pipe",
     stderr: "pipe",
+    env: { KYOZAI_E2E_MODE: "1" },
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    // モバイル幅での操作が肝心な案件になったら、名前に @mobile を含むテストだけを
-    // 拾う2つ目のプロジェクトを足す（CIが入れているブラウザは chromium だけなので、
-    // 端末は Chromium 系〈Pixel 5 等〉を使う。WebKit 系の端末指定は起動できずに落ちる）。
+    { name: "chromium", grepInvert: /@mobile/, use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile", grep: /@mobile/, use: { ...devices["Pixel 5"] } },
   ],
 });
