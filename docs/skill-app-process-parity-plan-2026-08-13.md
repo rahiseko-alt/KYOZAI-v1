@@ -63,8 +63,9 @@ Browser
 ### モデル
 
 - 教材分析、構成、台本、内容QA、修正、画像QA: `gpt-5.5`、reasoning `medium`
-- 最終画像: `gpt-image-2-2026-04-21`、quality `medium`
-- 画像生成サイズ: `2048x1152`で生成後、検証済み画像を`1672x941`へ正規化
+- 最終画像モデルは生成ごとに利用者へ質問し、未選択では開始しない。
+- 選択肢は同条件比較対象の`gemini-3.1-flash-lite-image`、`gemini-3.1-flash-image`、`gpt-image-2` mediumに限定する。
+- 各providerの約1K・16:9出力を受け、検証済み画像を`1672x941`へcontain正規化する。
 - 生成単位: 1リクエスト1スライド
 - 自動再生成: 不良ページにつき1回まで
 
@@ -144,7 +145,7 @@ Skillが変更された場合は工程契約の再監査をCIで要求する。
 - Supabase Auth、job、revision、artifact、stage ledgerの最小構造を作る。
 - Vercel Workflowで、直接入力1件、3スライド限定の非同期jobを通す。
 - `gpt-5.5`で分析、マップ、講師台本、時間、凍結QAを分離実行する。
-- `gpt-image-2`で3枚を別々に生成し、寸法検査、montage、ZIPまで作る。
+- 利用者が選択した画像モデルで3枚を別々に生成し、寸法検査、montage、ZIPまで作る。
 - UIに実stage、再読込、画面を閉じた後の再開、完成PNG表示を接続する。
 - APIキーや接続秘密は環境変数名だけをコードへ置き、値は利用者が管理画面へ直接登録する。
 

@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "htmlparser2": "10.1.0",
+    "jszip": "^3.10.1",
     "lucide-react": "1.31.0",
     "next": "16.2.12",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

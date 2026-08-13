@@ -19,7 +19,13 @@ cd "${REPO_ROOT}" || {
 }
 
 PORT="${SMOKE_PORT:-3123}"
-BASE="http://localhost:${PORT}"
+BASE_HOST="localhost"
+IS_WSL=0
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  IS_WSL=1
+  BASE_HOST="$(ip route show default | sed -nE 's/^default via ([^ ]+).*/\1/p' | head -n 1)"
+fi
+BASE="http://${BASE_HOST}:${PORT}"
 WORK="$(mktemp -d)"
 PNPM_RUNNER="${REPO_ROOT}/scripts/run-pnpm.sh"
 
@@ -58,12 +64,16 @@ fi
 # Linuxでは独立プロセスグループ、Git BashではWindowsのプロセスツリーとして起動する。
 # pnpmだけを止めるとnext-serverが残るため、どちらも子孫をまとめて終了できるIDを保存する。
 PROCESS_MODE="group"
-if command -v setsid >/dev/null 2>&1; then
-  setsid bash -c 'echo $$ > "$1"; exec bash "$3" --filter web start --port "$2"' \
+if [ "${IS_WSL}" = "1" ]; then
+  PROCESS_MODE="windows-tree"
+  bash "${PNPM_RUNNER}" --filter web start --port "${PORT}" --hostname 0.0.0.0 >"${WORK}/server.log" 2>&1 &
+  echo $! >"${WORK}/pgid"
+elif command -v setsid >/dev/null 2>&1; then
+  setsid bash -c 'echo $$ > "$1"; exec bash "$3" --filter web start --port "$2" --hostname 0.0.0.0' \
     _ "${WORK}/pgid" "${PORT}" "${PNPM_RUNNER}" >"${WORK}/server.log" 2>&1 &
 else
   PROCESS_MODE="windows-tree"
-  bash "${PNPM_RUNNER}" --filter web start --port "${PORT}" >"${WORK}/server.log" 2>&1 &
+  bash "${PNPM_RUNNER}" --filter web start --port "${PORT}" --hostname 0.0.0.0 >"${WORK}/server.log" 2>&1 &
   echo $! >"${WORK}/pgid"
 fi
 
@@ -71,7 +81,9 @@ cleanup() {
   local pgid
   pgid="$(cat "${WORK}/pgid" 2>/dev/null || true)"
   if [ -n "${pgid}" ]; then
-    if [ "${PROCESS_MODE}" = "windows-tree" ]; then
+    if [ "${IS_WSL}" = "1" ]; then
+      powershell.exe -NoProfile -Command "\$connection = Get-NetTCPConnection -LocalPort ${PORT} -State Listen -ErrorAction SilentlyContinue; if (\$connection) { Stop-Process -Id \$connection.OwningProcess -Force -ErrorAction SilentlyContinue }" >/dev/null 2>&1 || true
+    elif [ "${PROCESS_MODE}" = "windows-tree" ]; then
       taskkill.exe /PID "${pgid}" /T /F >/dev/null 2>&1 || true
     else
       kill -TERM "-${pgid}" 2>/dev/null || true
