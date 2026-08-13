@@ -62,16 +62,21 @@ async function readUrl(raw: string, deadlineMs: number): Promise<string> {
     const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "";
     if (!["text/html", "text/plain", "application/xhtml+xml"].includes(contentType)) throw new Error("体験版のURL入力はWebページとテキストだけに対応しています。");
     const html = (await response.text()).slice(0, 1_500_000);
-    return html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    return extractVisibleText(html);
+  }
+  throw new Error("URLを読み込めませんでした。");
+}
+
+export function extractVisibleText(html: string) {
+  return html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/g, " ")
       .replace(/&amp;/g, "&")
       .replace(/\s+/g, " ")
+      .trim()
       .slice(0, MAX_TEXT_CHARS);
-  }
-  throw new Error("URLを読み込めませんでした。");
 }
 
 export async function sourcesFromFormData(form: FormData, deadlineMs = Number.POSITIVE_INFINITY): Promise<SourceInput[]> {

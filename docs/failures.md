@@ -1412,3 +1412,7 @@ Next.jsの子プロセスだけが残った。残存processがこのリポジト
 確認して停止した。Git Bashを明示した再実行では`setsid`未導入で起動できなかったため、Linuxでは従来の
 process group、Git BashではWindows process treeを終了する分岐を追加した。受け入れ判定は変更せず、
 修正後のHTTP smokeは全項目成功した。
+
+Phase 0 PRのCodeQLは、URL本文からscriptを除く正規表現が空白入り終了タグ`</script >`を
+取り逃すとして失敗した。属性付き開始タグと空白入り終了タグを扱う抽出関数へ修正し、script/styleの
+内容が教材本文へ入らない回帰テストを追加した。正規表現の警告を無視せず、入力例をテストで固定する。

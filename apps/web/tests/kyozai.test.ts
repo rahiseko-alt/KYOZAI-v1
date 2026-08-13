@@ -8,7 +8,7 @@ import { packageHtml } from "../lib/kyozai/package-html";
 import { readPackageResponse } from "../lib/kyozai/api-client";
 import { rateLimit } from "../lib/kyozai/rate-limit";
 import { isTeachingPackage } from "../lib/kyozai/schema";
-import { sourcesFromFormData } from "../lib/kyozai/source";
+import { extractVisibleText, sourcesFromFormData } from "../lib/kyozai/source";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -73,6 +73,11 @@ describe("体験版の回数制限", () => {
 });
 
 describe("資料入力", () => {
+  it("属性や空白を含むscriptとstyleをURL本文から除く", () => {
+    const html = '<main>教材本文</main><script type="module">危険な命令</script ><style media="all">非表示</style >';
+    expect(extractVisibleText(html)).toBe("教材本文");
+  });
+
   it("汎用MIMEで送られたPDFも署名を確認して受け入れる", async () => {
     const form = new FormData();
     form.append("files", new File(["%PDF-1.7\nfixture"], "training.pdf", { type: "application/octet-stream" }));
