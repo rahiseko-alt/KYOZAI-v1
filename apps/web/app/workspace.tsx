@@ -2,36 +2,27 @@
 
 import Image from "next/image";
 import {
-  BookOpenText,
   Check,
-  ChevronLeft,
-  ChevronRight,
   CircleHelp,
-  Clock3,
-  Download,
   FileText,
   Link2,
   LoaderCircle,
   Menu,
-  MessageSquareText,
-  Presentation,
-  Send,
   Sparkles,
   UploadCloud,
-  Users,
   X,
 } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { HOME_HEADING } from "@/lib/content";
-import { readPackageResponse } from "@/lib/kyozai/api-client";
-import { formatDuration, slideDurationSeconds } from "@/lib/kyozai/design";
+import { readPackageResponse, readRevisionResponse } from "@/lib/kyozai/api-client";
 import { packageHtml } from "@/lib/kyozai/package-html";
-import type { TeachingPackage } from "@/lib/kyozai/types";
-import { SlideArtwork } from "./slide-artwork";
+import type { RevisionMetadata } from "@/lib/kyozai/revision";
+import { canPromoteRevision, EMPTY_VERSION_STATE, initialVersion, moveVersion as moveVersionIndex, promoteRevision, type VersionState } from "@/lib/kyozai/version-history";
+import { CompleteView, type CompleteTab } from "./complete-view";
+import { DevBadge } from "./dev-badge";
 
 type Step = "input" | "generating" | "complete";
-type Tab = "slides" | "scenario" | "faq" | "quiz";
 
 const processingItems = ["資料の読み取り", "学習構成の設計", "4成果物の生成", "構造と整合の検証"];
 
@@ -41,12 +32,26 @@ export function Workspace() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceText, setSourceText] = useState("");
   const [request, setRequest] = useState("新入社員向けの30分研修。初心者にもわかる表現で、具体例を入れてください。");
-  const [result, setResult] = useState<TeachingPackage | null>(null);
-  const [tab, setTab] = useState<Tab>("slides");
+  const [versions, setVersions] = useState<VersionState>(EMPTY_VERSION_STATE);
+  const versionsRef = useRef<VersionState>(EMPTY_VERSION_STATE);
+  const [tab, setTab] = useState<CompleteTab>("slides");
   const [slideIndex, setSlideIndex] = useState(0);
   const [revision, setRevision] = useState("");
   const [error, setError] = useState("");
+  const [revisionPending, setRevisionPending] = useState(false);
+  const [revisionSummary, setRevisionSummary] = useState<RevisionMetadata | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const revisionAbortRef = useRef<AbortController | null>(null);
+  const revisionSequenceRef = useRef(0);
+  const result = versions.entries[versions.index]?.package ?? null;
+
+  const updateVersions = (updater: (current: VersionState) => VersionState) => {
+    setVersions((current) => {
+      const next = updater(current);
+      versionsRef.current = next;
+      return next;
+    });
+  };
 
   const onFiles = (incoming: FileList | null) => {
     if (!incoming) return;
@@ -70,8 +75,10 @@ export function Workspace() {
     form.append("request", request);
     try {
       const response = await fetch("/api/generate", { method: "POST", body: form });
-      setResult(await readPackageResponse(response, "教材を生成できませんでした。"));
+      const packageValue = await readPackageResponse(response, "教材を生成できませんでした。");
+      updateVersions(() => initialVersion(packageValue));
       setSlideIndex(0);
+      setRevisionSummary(null);
       setStep("complete");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "教材を生成できませんでした。");
@@ -80,23 +87,60 @@ export function Workspace() {
   };
 
   const revise = async () => {
-    if (!result || revision.trim().length < 3) return;
+    const baseState = versionsRef.current;
+    const baseEntry = baseState.entries[baseState.index];
+    if (!baseEntry || revision.trim().length < 3 || revisionPending) return;
+    const baseIndex = baseState.index;
+    const sequence = revisionSequenceRef.current + 1;
+    revisionSequenceRef.current = sequence;
+    revisionAbortRef.current?.abort();
+    const controller = new AbortController();
+    revisionAbortRef.current = controller;
     setError("");
-    setStep("generating");
+    setRevisionSummary(null);
+    setRevisionPending(true);
     try {
       const response = await fetch("/api/revise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ package: result, request: revision }),
+        body: JSON.stringify({
+          package: baseEntry.package,
+          request: revision,
+          selectedSlideNumber: slideIndex + 1,
+          baseVersionId: baseEntry.id,
+        }),
+        signal: controller.signal,
       });
-      setResult(await readPackageResponse(response, "教材を修正できませんでした。"));
+      const payload = await readRevisionResponse(response, "教材を修正できませんでした。元の教材は維持されています。");
+      const latest = versionsRef.current;
+      const latestBase = latest.entries[latest.index];
+      const stale = controller.signal.aborted || sequence !== revisionSequenceRef.current || !latestBase || !canPromoteRevision(latest, baseIndex, baseEntry.id, payload.package, payload.revision);
+      if (stale) return;
+      updateVersions((current) => promoteRevision(current, baseIndex, payload.package, payload.revision));
       setRevision("");
-      setSlideIndex(0);
-      setStep("complete");
+      setRevisionSummary(payload.revision);
     } catch (caught) {
+      if (controller.signal.aborted || sequence !== revisionSequenceRef.current) return;
       setError(caught instanceof Error ? caught.message : "教材を修正できませんでした。");
-      setStep("complete");
+    } finally {
+      if (sequence === revisionSequenceRef.current) setRevisionPending(false);
     }
+  };
+
+  const cancelRevision = () => {
+    revisionSequenceRef.current += 1;
+    revisionAbortRef.current?.abort();
+    setRevisionPending(false);
+    setError("修正を取り消しました。元の教材を表示しています。");
+  };
+
+  const moveVersion = (offset: -1 | 1) => {
+    revisionSequenceRef.current += 1;
+    revisionAbortRef.current?.abort();
+    setRevisionPending(false);
+    setRevisionSummary(null);
+    setError("");
+    updateVersions((current) => moveVersionIndex(current, offset));
   };
 
   const download = () => {
@@ -141,8 +185,15 @@ export function Workspace() {
           setSlideIndex={setSlideIndex}
           setRevision={setRevision}
           revise={revise}
+          revisionPending={revisionPending}
+          revisionSummary={revisionSummary}
+          cancelRevision={cancelRevision}
+          canUndo={versions.index > 0}
+          canRedo={versions.index >= 0 && versions.index < versions.entries.length - 1}
+          undo={() => moveVersion(-1)}
+          redo={() => moveVersion(1)}
           download={download}
-          restart={() => { setResult(null); setStep("input"); setError(""); }}
+          restart={() => { revisionSequenceRef.current += 1; revisionAbortRef.current?.abort(); updateVersions(() => EMPTY_VERSION_STATE); setStep("input"); setError(""); setRevisionSummary(null); }}
         />
       )}
     </main>
@@ -165,8 +216,6 @@ function Header({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void })
     </header>
   );
 }
-
-function DevBadge() { return <span className="dev-badge">開発中</span>; }
 
 type InputProps = {
   files: File[]; sourceUrl: string; sourceText: string; request: string; error: string;
@@ -237,53 +286,5 @@ function GeneratingView({ isRevision, files, sourceUrl }: { isRevision: boolean;
       <p className="processing-truth">工程別の完了表示は行わず、サーバーから検証済みの教材が返った時点でのみ完成画面へ進みます。</p>
       <div className="source-summary"><FileText size={19} /><span>{files.length ? `${files.length}件のファイル` : sourceUrl ? "公開URL" : "入力テキスト"}</span><span>を根拠に生成中</span></div>
     </section>
-  );
-}
-
-type CompleteProps = {
-  result: TeachingPackage; tab: Tab; slideIndex: number; revision: string; error: string;
-  setTab: (tab: Tab) => void; setSlideIndex: React.Dispatch<React.SetStateAction<number>>; setRevision: (value: string) => void;
-  revise: () => void; download: () => void; restart: () => void;
-};
-
-function CompleteView(props: CompleteProps) {
-  const { result } = props;
-  return (
-    <section className="complete-view">
-      <div className="complete-heading"><span className="success-icon"><Check /></span><div><p className="eyebrow">教材が完成しました</p><h1>{result.title}</h1><p>{result.sourceSummary}</p></div><button className="secondary-action" onClick={props.restart}>別の教材を作る</button></div>
-      <div className="project-facts"><span><Clock3 /> {result.durationMinutes}分</span><span><Users /> {result.targetAudience}</span><span><Presentation /> {result.slides.length}スライド</span></div>
-      <div className="result-tabs" role="tablist">
-        <button className={props.tab === "slides" ? "active" : ""} onClick={() => props.setTab("slides")}><Presentation /> スライド</button>
-        <button className={props.tab === "scenario" ? "active" : ""} onClick={() => props.setTab("scenario")}><BookOpenText /> 講師シナリオ</button>
-        <button className={props.tab === "faq" ? "active" : ""} onClick={() => props.setTab("faq")}><MessageSquareText /> FAQ</button>
-        <button className={props.tab === "quiz" ? "active" : ""} onClick={() => props.setTab("quiz")}><Check /> 確認テスト</button>
-      </div>
-      <div className="result-content">
-        {props.tab === "slides" && <SlidePreview result={result} index={props.slideIndex} setIndex={props.setSlideIndex} />}
-        {props.tab === "scenario" && <div className="document-list">{result.scenario.map((item) => <article key={item.section}><span>{item.minutes}分</span><div><h3>{item.section}</h3><p>{item.guidance}</p></div></article>)}</div>}
-        {props.tab === "faq" && <div className="document-list">{result.faq.map((item, index) => <article key={item.question}><span>Q{index + 1}</span><div><h3>{item.question}</h3><p>{item.answer}</p></div></article>)}</div>}
-        {props.tab === "quiz" && <div className="document-list quiz-list">{result.quiz.map((item, index) => <article key={item.question}><span>{index + 1}</span><div><h3>{item.question}</h3>{item.options.map((option, optionIndex) => <p key={option} className={optionIndex === item.answerIndex ? "correct" : ""}>{optionIndex === item.answerIndex && <Check size={15} />} {option}</p>)}<small>{item.explanation}</small></div></article>)}</div>}
-      </div>
-      <div className="result-actions"><button className="primary-action" onClick={props.download}><Download /> 印刷できるHTML教材を取得</button><span>PPTX書き出し <DevBadge /></span></div>
-      <div className="revision-panel">
-        <div><Sparkles /><span><strong>AIに修正を頼む</strong><small>対象箇所を探す必要はありません。教材全体の整合を保って直します。</small></span></div>
-        <div className="revision-input"><input value={props.revision} onChange={(event) => props.setRevision(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") props.revise(); }} placeholder="例：もっと初心者向けに。具体例を増やして、専門用語をやさしくして" maxLength={600} /><button className="icon-button send-button" onClick={props.revise} disabled={props.revision.trim().length < 3} title="修正を依頼"><Send /><span className="sr-only">修正を依頼</span></button></div>
-        <div className="suggestions"><button onClick={() => props.setRevision("もっと初心者向けの表現にしてください")}>初心者向けに</button><button onClick={() => props.setRevision("具体例を増やしてください")}>具体例を増やす</button><button onClick={() => props.setRevision("15分で実施できる短縮版にしてください")}>15分版にする</button></div>
-        {props.error && <p className="error-message" role="alert">{props.error}</p>}
-      </div>
-    </section>
-  );
-}
-
-function SlidePreview({ result, index, setIndex }: { result: TeachingPackage; index: number; setIndex: React.Dispatch<React.SetStateAction<number>> }) {
-  const slide = result.slides[index];
-  if (!slide) return null;
-  const duration = slideDurationSeconds(slide);
-  return (
-    <div className="slide-layout">
-      <SlideArtwork slide={slide} total={result.slides.length} />
-      <aside className="speaker-notes"><div><p>講師ノート</p><span>{slide.speakerNotes.length}字 / {formatDuration(duration)}</span></div><h3>{slide.title}</h3><p>{slide.speakerNotes}</p></aside>
-      <div className="slide-controls"><button className="icon-button" onClick={() => setIndex((value) => Math.max(0, value - 1))} disabled={index === 0} title="前のスライド"><ChevronLeft /><span className="sr-only">前のスライド</span></button><span>{index + 1} / {result.slides.length}</span><button className="icon-button" onClick={() => setIndex((value) => Math.min(result.slides.length - 1, value + 1))} disabled={index === result.slides.length - 1} title="次のスライド"><ChevronRight /><span className="sr-only">次のスライド</span></button></div>
-    </div>
   );
 }

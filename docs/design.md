@@ -158,3 +158,21 @@
 - 高機能な手動編集UIは追加せず、自然言語修正と復元を主経路にする。
 
 Phase 0は修正契約、差分validator、50件の評価fixtureまでとし、画像生成APIや公開APPには接続しない。
+
+---
+
+## 11. 2026-08-13 Revise Phase 1の公開APP境界
+
+公開APPの自然言語修正を、教材一式の再生成から検証可能な局所patchへ変更した。
+
+- 対象は「このスライド」または番号で明示した1〜3枚とする。
+- Phase 1で変更できるのは`theme`、`title`、`keyMessage`、`labels`の1要素、`bullets`の1要素だけとする。
+- 操作は厳密な1件置換`text.replace`と、対象文字列全体の言い換え`text.rewrite`に限定する。
+- AIは完成`TeachingPackage`を返さず、型付きplanとpatchだけを返す。candidateはサーバーのexecutorが構築する。
+- Schema、事前条件、配列形状、対象外deep diff、base/candidate SHA-256がすべて合格した場合だけcurrentへ昇格する。
+- 失敗、取消、古い応答、未対応操作では旧版を維持する。Undo/Redoは同一画面セッション内の線形履歴とする。
+- 台本、時間、FAQ、quiz、画像、配色、layout、追加・削除・移動、全体修正、永続履歴はPhase 1では変更しない。
+- 高機能な直接編集UIは追加せず、AIへの修正依頼を主経路にする。
+- 公開APPのモデルは引き続き`gpt-5.5`、`store: false`とし、スライド画像生成APIは接続しない。
+
+Phase 1の機械判定は、既存Phase 0の50件を維持したうえで、実executorを通る追加50件を使用する。

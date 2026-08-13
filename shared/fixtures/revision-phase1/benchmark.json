@@ -1,0 +1,70 @@
+{
+  "version": "kyozai-revise-phase1@1.0.0",
+  "groups": [
+    {
+      "id": "success",
+      "cases": [
+        { "id": "S01", "operation": "text.replace", "target": [1, "title"], "match": "入門", "result": "情報セキュリティ基礎" },
+        { "id": "S02", "operation": "text.replace", "target": [2, "theme"], "match": "共有", "result": "情報共有方法" },
+        { "id": "S03", "operation": "text.replace", "target": [3, "keyMessage"], "match": "止まる", "result": "まず止まる、確認する、相談する。" },
+        { "id": "S04", "operation": "text.replace", "target": [2, "labels", 0], "match": "守る", "result": "安全な共有" },
+        { "id": "S05", "operation": "text.replace", "target": [2, "bullets", 1], "match": "送信先", "result": "宛先と添付を確認する" },
+        { "id": "S06", "operation": "text.replace", "target": [3, "bullets", 0], "match": "開かず止まる", "result": "リンクを開かないで止まる" },
+        { "id": "S07", "operation": "text.replace", "target": [4, "title"], "match": "承認", "result": "判断の基準は会社が承認されているかどうか" },
+        { "id": "S08", "operation": "text.replace", "target": [5, "keyMessage"], "match": "初動の速さ", "result": "早い報告が影響を小さくする" },
+        { "id": "S09", "operation": "text.replace", "target": [6, "bullets", 3], "match": "端末", "result": "現在の利用端末状態" },
+        { "id": "S10", "operation": "text.replace", "target": [7, "title"], "match": "すぐ", "result": "迷ったら、操作を止めて速やかに報告する" },
+        { "id": "S11", "operation": "text.rewrite", "target": [1, "theme"], "result": "情報を扱う基本" },
+        { "id": "S12", "operation": "text.rewrite", "target": [2, "title"], "result": "共有先と方法を確認する" },
+        { "id": "S13", "operation": "text.rewrite", "target": [3, "keyMessage"], "result": "不審な連絡は止めて確認し、相談します。" },
+        { "id": "S14", "operation": "text.rewrite", "target": [2, "labels", 1], "result": "避ける共有方法" },
+        { "id": "S15", "operation": "text.rewrite", "target": [3, "bullets", 2], "result": "指定窓口に相談する" },
+        { "id": "S16", "operation": "text.rewrite", "target": [4, "title"], "result": "承認済みの方法かを確認する" },
+        { "id": "S17", "operation": "text.rewrite", "target": [5, "keyMessage"], "result": "早い報告で影響を小さくします。" },
+        { "id": "S18", "operation": "text.rewrite", "target": [6, "bullets", 0], "result": "発生した出来事" },
+        { "id": "S19", "operation": "text.rewrite", "target": [6, "theme"], "result": "報告に必要な確認事項" },
+        { "id": "S20", "operation": "text.rewrite", "target": [7, "title"], "result": "迷ったら止めて報告する" }
+      ]
+    },
+    {
+      "id": "reject",
+      "cases": [
+        { "id": "R01", "kind": "scope-global", "failureCode": "unsupported_operation" },
+        { "id": "R02", "kind": "scope-missing", "failureCode": "ambiguous_scope" },
+        { "id": "R03", "kind": "scope-conflict", "failureCode": "ambiguous_scope" },
+        { "id": "R04", "kind": "scope-four", "failureCode": "unsupported_operation" },
+        { "id": "R05", "kind": "scope-out-of-range", "failureCode": "ambiguous_scope" },
+        { "id": "R06", "kind": "unsupported-plan", "failureCode": "unsupported_operation" },
+        { "id": "R07", "kind": "plan-target-mismatch", "failureCode": "scope_violation" },
+        { "id": "R08", "kind": "patch-out-of-scope", "failureCode": "scope_violation" },
+        { "id": "R09", "kind": "duplicate-target", "failureCode": "invalid_plan" },
+        { "id": "R10", "kind": "expected-value-mismatch", "failureCode": "precondition_failed" },
+        { "id": "R11", "kind": "replace-no-match", "failureCode": "precondition_failed" },
+        { "id": "R12", "kind": "replace-many-matches", "failureCode": "precondition_failed" },
+        { "id": "R13", "kind": "replace-false-postcondition", "failureCode": "precondition_failed" },
+        { "id": "R14", "kind": "scalar-container", "failureCode": "invalid_plan" },
+        { "id": "R15", "kind": "array-missing-container", "failureCode": "precondition_failed" },
+        { "id": "R16", "kind": "array-reordered-container", "failureCode": "precondition_failed" },
+        { "id": "R17", "kind": "array-invalid-index", "failureCode": "precondition_failed" },
+        { "id": "R18", "kind": "rewrite-replace-fields", "failureCode": "invalid_plan" },
+        { "id": "R19", "kind": "rewrite-no-change", "failureCode": "precondition_failed" },
+        { "id": "R20", "kind": "rewrite-over-max", "failureCode": "precondition_failed" }
+      ]
+    },
+    {
+      "id": "version-flow",
+      "cases": [
+        { "id": "V01", "kind": "hash-deterministic" },
+        { "id": "V02", "kind": "candidate-hash-and-parent" },
+        { "id": "V03", "kind": "provided-base-id" },
+        { "id": "V04", "kind": "initial-history" },
+        { "id": "V05", "kind": "undo" },
+        { "id": "V06", "kind": "redo" },
+        { "id": "V07", "kind": "redo-truncation" },
+        { "id": "V08", "kind": "stale-index" },
+        { "id": "V09", "kind": "stale-base-id" },
+        { "id": "V10", "kind": "history-boundaries" }
+      ]
+    }
+  ]
+}
