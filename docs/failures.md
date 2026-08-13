@@ -1420,3 +1420,44 @@ Phase 0 PRのCodeQLは、URL本文からscriptを除く正規表現が空白入�
 上記の正規表現修正後も、CodeQLは属性のような文字を含む不正終了タグを取り逃すとして再度失敗した。
 HTML構造を正規表現で扱う方針が誤りだったため、`htmlparser2`でDOMを構築し、script/style要素を除去して
 text contentを取得する方式へ置き換えた。不正終了タグを含む入力でもscript本文を返さないテストを追加した。
+
+## 2026-08-13 Revise Phase 1の初回統合検証で契約の不整合を検出した
+
+Phase 1の初回lintで`workspace.tsx`と`revision.ts`が300行上限を超えた。lintを緩めず、完成画面、
+開発中表示、revision contractを変更責任ごとのファイルへ分離した。
+
+追加50件fixtureの初回実行では、`text.replace`の`result`に置換語だけを書いたcaseとleaf全体を書いたcaseが
+混在し、厳密postconditionで7件失敗した。また、多重一致拒否caseはテスト準備中にbaseをsnapshot取得後に
+変更していたため、executorではなくテスト自身が旧版維持判定を壊していた。fixtureをleaf全体の結果へ統一し、
+拒否用baseはsnapshot前に準備した。executorの1件一致とpostcondition検証は緩めていない。
+
+API routeの単体テスト追加時、TypeScriptの`@/*` aliasがVitestへ設定されておらずimportに失敗した。
+本番routeのimportを相対パスへ崩さず、Vitest設定へ同じalias解決を追加した。
+
+実モデルforward-testの初回起動は、実行器がTypeScriptをCommonJS出力として扱い、top-level awaitの変換に
+失敗してAPI呼出し前に停止した。`main`関数内で非同期処理を実行する形へ変更した。
+
+次の実行では、OpenAI Structured Outputsが`uniqueItems` keywordを受理せず全20件をHTTP 400で拒否した。
+重複targetSlidesはruntime validatorとexecutorで引き続き拒否し、OpenAIへ渡すwire schemaからだけ
+未対応keywordを除いた。恒久的な4xxを3回再試行しないprovider分類も追加した。
+
+wire schema修正後のforward-testでは、fieldの「テーマ全体」を教材全体修正と誤認し、10件を実行前に拒否した。
+全体scopeの検出を「教材全体」「スライド全体」等へ限定し、field全体のrewriteを許可した。再実行では
+`gpt-5.5`の匿名20件すべてで安全性と意味意図が合格した。
+
+最終smokeの初回は既定ポート3123が使用中で安全停止した。既存プロセスには触れず、3137へ変更した再実行で
+全HTTP・CSP判定が成功した。
+
+意味意図の判定へtarget field完全一致を追加してforward-testを短時間に再実行したところ、OpenAIの
+SSE応答が全試行で読取り不能となり、candidate生成前に20件すべて失敗した。直前の実行では20/20が
+成功しており、ローカル95件、build、smoke、E2Eは継続して合格している。失敗時に旧版を維持し、
+最大3回で停止する挙動は機能した。実モデル検証は通常CIへ混ぜず、並列度を4から2へ下げ、batch間へ
+待機を入れたopt-in gateとして再実行する。
+
+非streaming化後の再試行で、providerはHTTP 429と`insufficient_quota`を返し、SSE parser不良ではなく
+API利用枠不足が直近失敗の原因だと確定した。最初の実モデル20/20合格は利用枠が残っていた時点の結果である。
+20件を再び3回ずつ試さないよう、JSON応答とHTTP 200内のSSE error eventの両方で利用枠不足を検出し、
+1回で旧版維持へ移るよう修正した。forward-testも最初のbatchが全件provider unavailableなら停止する。
+
+この修正後の最終smokeでは3137も使用中だったため安全停止し、3139で全HTTP・CSP判定を通した。
+使用中の既存プロセスは停止していない。Playwright 4件も続けて成功した。

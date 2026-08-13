@@ -15,7 +15,8 @@
     "audit": "pnpm audit --audit-level moderate",
     "validate:skills": "node scripts/validate-skills.mjs",
     "validate:process": "node scripts/validate-process-contract.mjs",
-    "validate:revise": "node scripts/validate-revision-benchmark.mjs && node --test .agents/skills/kyozai-revise/scripts/validate_revision.test.mjs"
+    "validate:revise": "node scripts/validate-revision-benchmark.mjs && node scripts/validate-revision-phase1.mjs && node --test .agents/skills/kyozai-revise/scripts/validate_revision.test.mjs",
+    "test:revise:forward": "pnpm --dir apps/web exec node --env-file-if-exists=.env.local --import tsx ../../scripts/forward-test-revision.ts"
   },
   "devDependencies": {
     "ajv": "8.18.0",

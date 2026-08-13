@@ -1,3 +1,4 @@
+import type { RevisionPlan } from "./revision";
 import type { TeachingPackage } from "./types";
 
 export const mockPackage: TeachingPackage = {
@@ -32,3 +33,26 @@ export const mockPackage: TeachingPackage = {
     { question: "業務資料の保存先として適切なのは？", options: ["個人クラウド", "私物USB", "会社が承認した保存先"], answerIndex: 2, explanation: "承認された環境だけを利用します。" },
   ],
 };
+
+export function mockRevisionPlan(packageValue: TeachingPackage, targetSlides: number[]): RevisionPlan {
+  return {
+    status: "planned",
+    operation: "text.rewrite",
+    targetSlides,
+    patches: targetSlides.map((slideNumber) => {
+      const title = packageValue.slides[slideNumber - 1]!.title;
+      return {
+        operation: "text.rewrite" as const,
+        target: { kind: "scalar" as const, slideNumber, field: "title" as const },
+        expectedValue: title,
+        expectedContainerValue: null,
+        matchValue: null,
+        replacementText: null,
+        resultValue: `${title}（修正版）`,
+        maxCharacters: null,
+      };
+    }),
+    failureCode: null,
+    message: null,
+  };
+}
