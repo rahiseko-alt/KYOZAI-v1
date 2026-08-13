@@ -64,9 +64,12 @@
     "forbidden": ["gpt-5.6-sol"]
   },
   "imageModelPolicy": {
-    "default": "gpt-image-2-2026-04-21",
-    "quality": "medium",
-    "generationSize": "2048x1152",
+    "selectionRequiredPerJob": true,
+    "allowed": [
+      "gemini-3.1-flash-lite-image",
+      "gemini-3.1-flash-image",
+      "gpt-image-2-medium"
+    ],
     "deliverySize": "1672x941",
     "oneRequestPerSlide": true,
     "automaticRetriesPerFailedSlide": 1

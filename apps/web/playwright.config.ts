@@ -28,7 +28,7 @@ export default defineConfig({
     // サーバ側の例外（Server Component / Server Action のエラー）をテストのログに出す。
     stdout: "pipe",
     stderr: "pipe",
-    env: { KYOZAI_E2E_MODE: "1" },
+    env: { KYOZAI_E2E_MODE: "1", PROCESS_PARITY_PIPELINE_ENABLED: "1" },
   },
   projects: [
     { name: "chromium", grepInvert: /@mobile/, use: { ...devices["Desktop Chrome"] } },

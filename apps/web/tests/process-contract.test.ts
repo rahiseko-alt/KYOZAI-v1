@@ -34,8 +34,18 @@ function processDeck(): ProcessDeck {
 
 describe("Skill同等工程の契約", () => {
   it("機械可読な正本とAPPのstage順が一致する", () => {
-    const contract = JSON.parse(readFileSync(rootFile("shared/kyozai-process-contract.json"), "utf8")) as { stages: Array<{ id: string }> };
+    const contract = JSON.parse(readFileSync(rootFile("shared/kyozai-process-contract.json"), "utf8")) as {
+      stages: Array<{ id: string }>;
+      imageModelPolicy: { selectionRequiredPerJob: boolean; default?: string; allowed: string[] };
+    };
     expect(contract.stages.map((stage) => stage.id)).toEqual(PROCESS_STAGES);
+    expect(contract.imageModelPolicy.selectionRequiredPerJob).toBe(true);
+    expect(contract.imageModelPolicy.default).toBeUndefined();
+    expect(contract.imageModelPolicy.allowed).toEqual([
+      "gemini-3.1-flash-lite-image",
+      "gemini-3.1-flash-image",
+      "gpt-image-2-medium",
+    ]);
   });
 
   it("講師台本から300文字/分で時間を計算する", () => {
