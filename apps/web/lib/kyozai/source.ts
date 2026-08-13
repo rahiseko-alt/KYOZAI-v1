@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { DomUtils, parseDocument } from "htmlparser2";
 
 import type { SourceInput } from "./types";
 
@@ -68,15 +69,10 @@ async function readUrl(raw: string, deadlineMs: number): Promise<string> {
 }
 
 export function extractVisibleText(html: string) {
-  return html
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ")
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, MAX_TEXT_CHARS);
+  const document = parseDocument(html, { decodeEntities: true });
+  const hiddenElements = DomUtils.findAll((element) => element.name === "script" || element.name === "style", document);
+  hiddenElements.forEach((element) => DomUtils.removeElement(element));
+  return DomUtils.textContent(document).replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_CHARS);
 }
 
 export async function sourcesFromFormData(form: FormData, deadlineMs = Number.POSITIVE_INFINITY): Promise<SourceInput[]> {

@@ -1416,3 +1416,7 @@ process group、Git BashではWindows process treeを終了する分岐を追加
 Phase 0 PRのCodeQLは、URL本文からscriptを除く正規表現が空白入り終了タグ`</script >`を
 取り逃すとして失敗した。属性付き開始タグと空白入り終了タグを扱う抽出関数へ修正し、script/styleの
 内容が教材本文へ入らない回帰テストを追加した。正規表現の警告を無視せず、入力例をテストで固定する。
+
+上記の正規表現修正後も、CodeQLは属性のような文字を含む不正終了タグを取り逃すとして再度失敗した。
+HTML構造を正規表現で扱う方針が誤りだったため、`htmlparser2`でDOMを構築し、script/style要素を除去して
+text contentを取得する方式へ置き換えた。不正終了タグを含む入力でもscript本文を返さないテストを追加した。

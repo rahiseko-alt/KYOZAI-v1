@@ -76,6 +76,7 @@ describe("資料入力", () => {
   it("属性や空白を含むscriptとstyleをURL本文から除く", () => {
     const html = '<main>教材本文</main><script type="module">危険な命令</script ><style media="all">非表示</style >';
     expect(extractVisibleText(html)).toBe("教材本文");
+    expect(extractVisibleText("<main>教材本文</main><script>危険な命令</script\t\n bar><p>後半</p>")).not.toContain("危険な命令");
   });
 
   it("汎用MIMEで送られたPDFも署名を確認して受け入れる", async () => {
