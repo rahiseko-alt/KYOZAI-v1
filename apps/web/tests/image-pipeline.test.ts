@@ -159,6 +159,13 @@ describe("画像生成工程", () => {
       "manifest.json",
       "index.html",
     ]));
+    const stageLedger = JSON.parse(await zip.file("stage-ledger.json")!.async("text")) as Array<{ stage: string; status: string }>;
+    expect(stageLedger.filter((entry) => ["image_generate", "image_validate", "package"].includes(entry.stage)))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ stage: "image_generate", status: "passed" }),
+        expect.objectContaining({ stage: "image_validate", status: "passed" }),
+        expect.objectContaining({ stage: "package", status: "passed" }),
+      ]));
   });
 
   it("完成PNGの実バイトと申告hashが違うZIPを拒否する", async () => {

@@ -18,7 +18,13 @@ function contentAndScript(result: TeachingPackage) {
     "",
     "講師台本:",
     slide.speakerNotes,
+    `文字数: ${slide.scriptCharacters ?? [...slide.speakerNotes].length}字`,
+    `目安時間: ${formatDuration(slide.durationSeconds ?? Math.round(([...slide.speakerNotes].length / 300) * 60))}`,
   ].join("\n")).join("\n\n");
+}
+
+function formatDuration(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function bytesFromBase64(value: string) {
@@ -29,6 +35,18 @@ function bytesFromBase64(value: string) {
 async function sha256Base64(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", bytesFromBase64(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function finalizedResult(result: TeachingPackage) {
+  const finalResult = structuredClone(result);
+  if (!finalResult.process) return finalResult;
+  finalResult.process.stageLedger = finalResult.process.stageLedger.map((entry) => {
+    if (entry.stage === "image_generate") return { ...entry, status: "passed", inputs: ["frozen_deck", "image_prompts"], outputs: ["slide_images"], validator: "one-request-per-slide" };
+    if (entry.stage === "image_validate") return { ...entry, status: "passed", inputs: ["slide_images"], outputs: ["image_validation", "montage"], validator: "all-final-images-passed" };
+    if (entry.stage === "package") return { ...entry, status: "passed", inputs: ["validated_images", "deck_spec"], outputs: ["manifest", "package_zip"], validator: "manifest-and-artifact-integrity" };
+    return entry;
+  });
+  return finalResult;
 }
 
 export async function createTeachingPackageZip(result: TeachingPackage, images: RenderedSlideImage[], montagePng: string) {
@@ -45,6 +63,7 @@ export async function createTeachingPackageZip(result: TeachingPackage, images: 
     throw new Error("montageが有効なPNGではありません。");
   }
   const zip = new JSZip();
+  const finalResult = finalizedResult(result);
   const imageFolder = zip.folder("images");
   if (!imageFolder) throw new Error("画像フォルダーを作成できませんでした。");
   const imageEntries = ordered.map((image) => {
@@ -54,7 +73,7 @@ export async function createTeachingPackageZip(result: TeachingPackage, images: 
   });
   const manifest = {
     format: "kyozai-package@1.0.0",
-    designProfile: result.designProfile,
+    designProfile: finalResult.designProfile,
     imageModel: ordered[0]?.modelId,
     providerModel: ordered[0]?.providerModel,
     providerQuality: ordered[0]?.providerQuality,
@@ -62,15 +81,30 @@ export async function createTeachingPackageZip(result: TeachingPackage, images: 
     generatedSlideCount: ordered.length,
     deliverySize: "1672x941",
     previewAndPackageShareFinalPng: true,
+    processContract: finalResult.process?.contract,
+    sourceHash: finalResult.process?.source.sourceHash,
+    contentFreezePassed: finalResult.process?.contentFreeze.passed,
+    artifacts: [
+      "deck-spec.json",
+      "deck-content-and-script.txt",
+      "source-info.json",
+      "image-prompts.json",
+      "image-validation.json",
+      "montage.png",
+      ...(finalResult.process ? ["stage-ledger.json"] : []),
+      "index.html",
+      ...imageEntries.map((entry) => entry.path),
+    ],
     images: imageEntries,
   };
-  zip.file("deck-spec.json", JSON.stringify(result, null, 2));
-  zip.file("deck-content-and-script.txt", contentAndScript(result));
-  zip.file("source-info.json", JSON.stringify({ summary: result.sourceSummary }, null, 2));
+  zip.file("deck-spec.json", JSON.stringify(finalResult, null, 2));
+  zip.file("deck-content-and-script.txt", contentAndScript(finalResult));
+  zip.file("source-info.json", JSON.stringify({ summary: finalResult.sourceSummary, ...(finalResult.process?.source ?? {}) }, null, 2));
+  if (finalResult.process) zip.file("stage-ledger.json", JSON.stringify(finalResult.process.stageLedger, null, 2));
   zip.file("image-prompts.json", JSON.stringify(ordered.map((image) => ({ slideNumber: image.slideNumber, modelId: image.modelId, providerModel: image.providerModel, providerQuality: image.providerQuality, qaModel: image.qaModel, prompt: image.prompt, promptHash: image.promptHash })), null, 2));
   zip.file("image-validation.json", JSON.stringify(ordered.map((image) => ({ slideNumber: image.slideNumber, imageHash: image.imageHash, attemptCount: image.attemptCount, ...image.validation })), null, 2));
   zip.file("montage.png", montagePng, { base64: true });
   zip.file("manifest.json", JSON.stringify(manifest, null, 2));
-  zip.file("index.html", packageHtml(result, ordered));
+  zip.file("index.html", packageHtml(finalResult, ordered));
   return zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
 }

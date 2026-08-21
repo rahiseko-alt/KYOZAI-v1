@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { API_ROUTE_BUDGET_MS, generatePackage } from "@/lib/kyozai/openai";
+import { generatePackage } from "@/lib/kyozai/content-generation";
+import { API_ROUTE_BUDGET_MS } from "@/lib/kyozai/openai";
 import { isImageModelId } from "@/lib/kyozai/image-models";
 import { mockPackage } from "@/lib/kyozai/mock";
 import { isProcessParityPipelineEnabled } from "@/lib/kyozai/process-contract";

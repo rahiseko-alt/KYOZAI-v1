@@ -10,6 +10,49 @@ export type Slide = {
   keyMessage: string;
   bullets: string[];
   speakerNotes: string;
+  composition?: string;
+  scriptCharacters?: number;
+  durationSeconds?: number;
+};
+
+export type TeachingAnalysis = {
+  targetAudience: string;
+  problem: string;
+  outcome: string;
+  coreClaim: string;
+  evidence: string[];
+  examples: string[];
+  finalAction: string;
+};
+
+export type StageLedgerEntry = {
+  stage: string;
+  status: "pending" | "running" | "passed" | "failed" | "skipped";
+  inputs: string[];
+  outputs: string[];
+  validator: string;
+  model?: string;
+};
+
+export type ProcessEvidence = {
+  contract: "kyozai-slide-process@1.0.0";
+  source: {
+    refs: string[];
+    sourceHash: string;
+  };
+  analysis: TeachingAnalysis;
+  contentFreeze: {
+    passed: boolean;
+    issues: string[];
+  };
+  imagePrompts: Array<{
+    slideNumber: number;
+    prompt: string;
+    promptHash: string;
+  }>;
+  totalScriptCharacters: number;
+  totalDurationSeconds: number;
+  stageLedger: StageLedgerEntry[];
 };
 
 export type TeachingPackage = {
@@ -35,6 +78,7 @@ export type TeachingPackage = {
     answerIndex: number;
     explanation: string;
   }>;
+  process?: ProcessEvidence;
 };
 
 export type SourceInput =

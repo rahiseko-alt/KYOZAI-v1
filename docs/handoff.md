@@ -10,12 +10,15 @@
 
 ## 現在地
 
-- ブランチ: `main`。
-- 今回のチェックイン対象: `AGENTS.md`、`apps/web/next.config.ts`、`docs/failures.md`、この`docs/handoff.md`。
-- `AGENTS.md`へ最優先指示を追加済み。
-- `next.config.ts`にはVercelのpnpmモノレポ解決用修正があるが、Skill同一化より後回し。
-- `docs/failures.md`へ旧デプロイ再実行の誤認とVercelビルド失敗を追記済み。
-- 変更後のtypecheck、lint、test（39件）、build、`scripts/smoke.sh`はすべてPASS。
+- ブランチ: `codex/skill-app-process-parity`。起点は`0a21ccb`。
+- 正本`kyozai-slide` Skillは変更していない。
+- APPの教材本文生成を、1回の完成JSON生成から、`analysis`、`slide_map`、`script_timing`、`content_freeze`の独立AI工程へ変更した。
+- 講師台本の文字数と時間はAI申告を使わず、APPが300文字/分で決定論的に計算する。
+- 各スライドへ具体的な`composition`を保存し、画像promptへ要素数、位置、関係として渡す。
+- source hash、原典参照、教材分析、凍結結果、画像prompt、10段階のstage ledgerをdeckへ保存する。
+- 内容凍結のAI QAまたは機械検証が不合格なら、画像生成用deckを作らない。
+- 完成ZIPを実際に作った時だけ`image_generate`、`image_validate`、`package`を`passed`へ昇格する。
+- 直接入力fixtureで工程を再現し、凍結不合格と表紙欠落を停止する回帰テストを追加した。
 
 ## 本番状態
 
@@ -29,20 +32,31 @@
 
 ## Skill同等性の不足
 
-- 公開APPは教材生成を1回のStructured Outputへ集約しており、Skillの分析、学習順、スライドマップ、内容凍結を独立工程として実行・検証していない。
-- APPの画像プロンプトは`layoutFamily`名と表示文言を渡すだけで、Skillが定める具体構図、要素数、位置、関係を渡していない。
-- そのため記事内容に応じた比較、工程、因果、関係、数値、対象者、絞り込み等の構図選択が弱く、固定的で低品質な資料になる。
+- ブラッドボーン記事の元URLまたは本文が残っておらず、同じ実入力によるSkill/APP blind比較は未実施。
+- 現行routeは同期処理のため、画面を閉じた後の再開、永続job、private artifact storage、二重生成防止は未実装。
+- APPのstage進捗は生成完了後の証跡には残るが、処理中UIへ10段階を逐次配信していない。
+- 実画像の文字差、切れ、重なり、コントラスト、25%表示、スマホ可読性のQAは現行画像QAに依存し、Skillとのblind品質比較は未実施。
 - 現在の本番結果はブラッドボーンの記事を「体験価値の伝え方」という8枚教材へ変換していたが、元記事URLを完成画面・成果物へ残していない。
 - 同一入力でSkill比較するための出典が欠落しており、Skillの実行比較は未完了。
 
 ## 次回の着手順
 
-1. 比較対象のブラッドボーン記事の元URLまたは本文を確定する。
-2. 正本`kyozai-slide` Skillをその入力で最後まで実行し、分析、slide map、台本、時間、具体構図、画像、検証、ZIPを作る。
-3. APPの各工程と成果物を同じ入力で採取し、Skillとの差分表を作る。
-4. APPをSkillの段階処理へ置き換え、各段の中間成果物とgateを機械検証する。
-5. `layoutFamily`だけでなく、内容から選んだ具体構図、要素数、位置、関係をdeck specと画像promptへ保存する。
-6. 同一入力のSkill/APP比較が合格してから、保留中のVercel修正と本番反映へ戻る。
+1. 再現可能な直接入力fixtureを正本Skillでも最後まで実行し、APP成果物とのblind評価表を作る。
+2. ブラッドボーン記事の元URLまたは本文が判明したら、同じ比較器へ追加する。
+3. 同期routeを永続jobへ移し、stage ledgerを処理中UIへ逐次表示する。
+4. 原本、draft、final、manifest、ZIPをprivate storageで不変artifactとして管理する。
+5. 実3画像モデルでforward testし、文字差・可読性・montage QAを同一fixtureで検証する。
+6. 同一入力のSkill/APP blind評価が合格してから、本番反映へ戻る。
+
+## 今回の検証
+
+- `pnpm validate:process`: PASS（10 stages、Skill baseline 3 files）
+- `pnpm validate:skills`: PASS（7 Skills）
+- typecheck / lint: PASS
+- Vitest: 6 files、42 tests PASS
+- build: PASS
+- `scripts/smoke.sh`: PASS
+- Playwright: desktop/mobile 3 tests PASS
 
 ## 禁止
 

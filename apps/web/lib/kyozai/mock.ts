@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+
+import { buildSlideImagePrompt } from "./image-prompt";
+import { PROCESS_CONTRACT_ID, PROCESS_STAGES, calculateNarrationTiming } from "./process-contract";
 import type { TeachingPackage } from "./types";
 
 export const mockPackage: TeachingPackage = {
@@ -32,3 +36,36 @@ export const mockPackage: TeachingPackage = {
     { question: "業務資料の保存先として適切なのは？", options: ["個人クラウド", "私物USB", "会社が承認した保存先"], answerIndex: 2, explanation: "承認された環境だけを利用します。" },
   ],
 };
+
+mockPackage.slides.forEach((slide) => Object.assign(slide, calculateNarrationTiming(slide.speakerNotes), {
+  composition: `slide ${slide.number}の表示要素を内容に沿って配置する`,
+}));
+const totalScriptCharacters = mockPackage.slides.reduce((sum, slide) => sum + (slide.scriptCharacters ?? 0), 0);
+mockPackage.process = {
+  contract: PROCESS_CONTRACT_ID,
+  source: { refs: ["fixture-input"], sourceHash: createHash("sha256").update("fixture-input").digest("hex") },
+  analysis: {
+    targetAudience: mockPackage.targetAudience,
+    problem: "日常業務で情報管理の判断に迷う",
+    outcome: "異常時に操作を止めて報告できる",
+    coreClaim: "日々の判断で会社と顧客の信頼を守る",
+    evidence: ["承認済みの方法と早期報告を扱う"],
+    examples: ["不審連絡への初動"],
+    finalAction: "迷ったら操作を止めて報告する",
+  },
+  contentFreeze: { passed: true, issues: [] },
+  imagePrompts: [],
+  totalScriptCharacters,
+  totalDurationSeconds: Math.round((totalScriptCharacters / 300) * 60),
+  stageLedger: PROCESS_STAGES.map((stage, index) => ({
+    stage,
+    status: index < 6 ? "passed" : "pending",
+    inputs: [],
+    outputs: [],
+    validator: index < 6 ? "fixture-validation" : "not-started",
+  })),
+};
+mockPackage.process.imagePrompts = mockPackage.slides.map((slide) => {
+  const prompt = buildSlideImagePrompt(mockPackage, slide);
+  return { slideNumber: slide.number, prompt, promptHash: createHash("sha256").update(prompt).digest("hex") };
+});

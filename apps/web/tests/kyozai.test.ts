@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 
 import { mockPackage } from "../lib/kyozai/mock";
 import { DESIGN_PROFILE } from "../lib/kyozai/design";
-import { API_ROUTE_BUDGET_MS, generatePackage } from "../lib/kyozai/openai";
+import { generatePackage } from "../lib/kyozai/content-generation";
+import { API_ROUTE_BUDGET_MS } from "../lib/kyozai/openai";
 import { packageHtml } from "../lib/kyozai/package-html";
 import { readPackageResponse } from "../lib/kyozai/api-client";
 import { rateLimit } from "../lib/kyozai/rate-limit";
@@ -105,6 +106,45 @@ describe("資料入力", () => {
 });
 
 describe("AI構造化応答", () => {
+  const analysis = {
+    targetAudience: mockPackage.targetAudience,
+    problem: "情報の扱いを日常の判断として理解できていない",
+    outcome: "異常時に操作を止めて報告できる",
+    coreClaim: "日々の小さな判断で信頼を守る",
+    evidence: ["承認済みの方法と早期報告が必要"],
+    examples: ["不審な連絡を開かず相談する"],
+    finalAction: "迷ったら操作を止めて報告する",
+  };
+  const slideMap = {
+    title: mockPackage.title,
+    sourceSummary: mockPackage.sourceSummary,
+    learningObjectives: mockPackage.learningObjectives,
+    slides: mockPackage.slides.map((slide) => ({
+      number: slide.number,
+      layoutFamily: slide.layoutFamily,
+      labels: slide.labels,
+      theme: slide.theme,
+      role: slide.role,
+      title: slide.title,
+      keyMessage: slide.keyMessage,
+      bullets: slide.bullets,
+      composition: `slide ${slide.number}の要素数、位置、関係を固定する`,
+    })),
+  };
+  const scripts = {
+    slides: mockPackage.slides.map(({ number, speakerNotes }) => ({ number, speakerNotes })),
+    scenario: mockPackage.scenario,
+    faq: mockPackage.faq,
+    quiz: mockPackage.quiz,
+  };
+  const freeze = { passed: true, issues: [] };
+  const completed = (value: unknown, id = crypto.randomUUID()) => new Response(JSON.stringify({
+    id,
+    status: "completed",
+    output: [{ content: [{ type: "output_text", text: JSON.stringify(value) }] }],
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+  const remainingStages = () => [completed(slideMap), completed(scripts), completed(freeze)];
+
   it("途中で切れたJSONを利用者へ露出せず再試行する", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const fetchMock = vi
@@ -115,17 +155,14 @@ describe("AI構造化応答", () => {
         incomplete_details: { reason: "max_output_tokens" },
         output: [{ content: [{ type: "output_text", text: '{"title":"途中' }] }],
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        id: "response-complete",
-        status: "completed",
-        output: [{ content: [{ type: "output_text", text: JSON.stringify(mockPackage) }] }],
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      .mockResolvedValueOnce(completed(analysis, "response-complete"));
+    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る");
 
-    expect(result).toEqual(mockPackage);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ title: mockPackage.title, process: { contentFreeze: { passed: true } } });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       model: string;
       stream: boolean;
@@ -133,12 +170,12 @@ describe("AI構造化応答", () => {
     };
     expect(firstBody).toMatchObject({ model: "gpt-5.5", stream: true, text: { verbosity: "low", format: { type: "json_schema", strict: true } } });
     const retryBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { max_output_tokens: number };
-    expect(retryBody.max_output_tokens).toBe(16_000);
+    expect(retryBody.max_output_tokens).toBe(3840);
   });
 
   it("ストリーミングされた構造化JSONを最後まで組み立てる", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
-    const json = JSON.stringify(mockPackage);
+    const json = JSON.stringify(analysis);
     const midpoint = Math.floor(json.length / 2);
     const event = (value: unknown) => `data: ${JSON.stringify(value)}\r\n\r\n`;
     const body = [
@@ -155,51 +192,43 @@ describe("AI構造化応答", () => {
         controller.close();
       },
     });
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(stream, {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(stream, {
       status: 200,
       headers: { "Content-Type": "text/event-stream" },
-    })));
-
-    await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る"))
-      .resolves.toEqual(mockPackage);
-  });
-
-  it("Schema準拠でも実行時契約を外れた教材を再生成する", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "test-key");
-    const invalid = structuredClone(mockPackage);
-    invalid.slides[0]!.layoutFamily = "focus";
-    const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        id: "response-runtime-invalid",
-        status: "completed",
-        output: [{ content: [{ type: "output_text", text: JSON.stringify(invalid) }] }],
-      }), { status: 200, headers: { "Content-Type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        id: "response-runtime-valid",
-        status: "completed",
-        output: [{ content: [{ type: "output_text", text: JSON.stringify(mockPackage) }] }],
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }));
+    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る"))
-      .resolves.toEqual(mockPackage);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+      .resolves.toMatchObject({ title: mockPackage.title, process: { analysis } });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("Schema準拠でも実行時契約を外れた分析を再生成する", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const invalid = { ...analysis, finalAction: 42 };
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(completed(invalid, "response-runtime-invalid"))
+      .mockResolvedValueOnce(completed(analysis, "response-runtime-valid"));
+    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る"))
+      .resolves.toMatchObject({ title: mockPackage.title, process: { analysis } });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it("OpenAI接続のTimeoutError後に残り時間内で再試行する", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const fetchMock = vi.fn<typeof fetch>()
       .mockRejectedValueOnce(new DOMException("request timed out", "TimeoutError"))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        id: "response-after-timeout",
-        status: "completed",
-        output: [{ content: [{ type: "output_text", text: JSON.stringify(mockPackage) }] }],
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      .mockResolvedValueOnce(completed(analysis, "response-after-timeout"));
+    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る", Date.now() + 120_000))
-      .resolves.toEqual(mockPackage);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+      .resolves.toMatchObject({ title: mockPackage.title, process: { analysis } });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it("routeの残り時間が足りない場合は新しいAI試行を開始しない", async () => {

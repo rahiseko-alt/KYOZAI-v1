@@ -12,13 +12,13 @@ export const teachingPackageSchema = {
     designProfile: { type: "string", enum: [DESIGN_PROFILE_ID] },
     title: { type: "string" },
     targetAudience: { type: "string" },
-    durationMinutes: { type: "integer", minimum: 5, maximum: 180 },
+    durationMinutes: { type: "integer", minimum: 1, maximum: 180 },
     sourceSummary: { type: "string" },
     learningObjectives: { ...stringArray, minItems: 2, maxItems: 4 },
     slides: {
       type: "array",
       minItems: 4,
-      maxItems: 8,
+      maxItems: 12,
       items: {
         type: "object",
         properties: {
@@ -39,7 +39,7 @@ export const teachingPackageSchema = {
     scenario: {
       type: "array",
       minItems: 3,
-      maxItems: 6,
+      maxItems: 8,
       items: {
         type: "object",
         properties: {
@@ -102,7 +102,7 @@ export function isTeachingPackage(value: unknown): value is TeachingPackage {
   const item = value as Partial<TeachingPackage>;
   const layouts = new Set(["cover", "focus", "compare", "sequence", "evidence", "checklist", "action"]);
   const roles = new Set(["introduction", "overview", "understanding", "example", "practice", "summary", "action"]);
-  const hasValidSlides = Array.isArray(item.slides) && item.slides.length >= 4 && item.slides.length <= 8 && item.slides.every((slide, index) =>
+  const hasValidSlides = Array.isArray(item.slides) && item.slides.length >= 4 && item.slides.length <= 12 && item.slides.every((slide, index) =>
     slide && typeof slide.number === "number" && slide.number === index + 1 && layouts.has(slide.layoutFamily) && Array.isArray(slide.labels) &&
     slide.labels.length <= 2 && slide.labels.every((label) => typeof label === "string") &&
     (slide.layoutFamily !== "compare" || slide.labels.length === 2) && typeof slide.theme === "string" && roles.has(slide.role) &&
@@ -115,7 +115,7 @@ export function isTeachingPackage(value: unknown): value is TeachingPackage {
     quiz && typeof quiz.question === "string" && Array.isArray(quiz.options) && quiz.options.length >= 3 && quiz.options.length <= 4 &&
     quiz.options.every((option) => typeof option === "string") && Number.isInteger(quiz.answerIndex) &&
     quiz.answerIndex >= 0 && quiz.answerIndex < quiz.options.length && typeof quiz.explanation === "string");
-  const hasValidScenario = Array.isArray(item.scenario) && item.scenario.length >= 3 && item.scenario.length <= 6 && item.scenario.every((section) =>
+  const hasValidScenario = Array.isArray(item.scenario) && item.scenario.length >= 3 && item.scenario.length <= 8 && item.scenario.every((section) =>
     section && typeof section.section === "string" && Number.isInteger(section.minutes) && section.minutes > 0 && section.minutes <= 180 && typeof section.guidance === "string");
   const hasValidFaq = Array.isArray(item.faq) && item.faq.length >= 3 && item.faq.length <= 6 && item.faq.every((faq) =>
     faq && typeof faq.question === "string" && typeof faq.answer === "string");
@@ -123,7 +123,7 @@ export function isTeachingPackage(value: unknown): value is TeachingPackage {
     item.designProfile === DESIGN_PROFILE_ID &&
     typeof item.title === "string" &&
     typeof item.targetAudience === "string" &&
-    typeof item.durationMinutes === "number" && Number.isInteger(item.durationMinutes) && item.durationMinutes >= 5 && item.durationMinutes <= 180 &&
+    typeof item.durationMinutes === "number" && Number.isInteger(item.durationMinutes) && item.durationMinutes >= 1 && item.durationMinutes <= 180 &&
     typeof item.sourceSummary === "string" &&
     Array.isArray(item.learningObjectives) && item.learningObjectives.length >= 2 && item.learningObjectives.length <= 4 &&
     item.learningObjectives.every((objective) => typeof objective === "string") &&
