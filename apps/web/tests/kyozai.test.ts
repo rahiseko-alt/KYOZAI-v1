@@ -204,6 +204,21 @@ describe("AI構造化応答", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it("内容凍結QAは原文丸写しではなく意味的な原典忠実性を検査する", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(completed(analysis));
+    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る"))
+      .resolves.toMatchObject({ title: mockPackage.title, process: { contentFreeze: { passed: true } } });
+
+    const freezeBody = JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body)) as { instructions: string };
+    expect(freezeBody.instructions).toContain("直接引用の有無ではなく");
+    expect(freezeBody.instructions).toContain("教材化のための短い言い換え");
+    expect(freezeBody.instructions).toContain("新しい事実を足していなければ合格");
+  });
+
   it("Schema準拠でも実行時契約を外れた分析を再生成する", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const invalid = { ...analysis, finalAction: 42 };
