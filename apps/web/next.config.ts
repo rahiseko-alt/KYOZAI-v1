@@ -13,9 +13,6 @@ const nextConfig: NextConfig = {
       "node_modules/.pnpm/sharp@*/node_modules/sharp/**/*",
       "node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**/*",
       "node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**/*",
-      "../../node_modules/.pnpm/sharp@*/node_modules/sharp/**/*",
-      "../../node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**/*",
-      "../../node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**/*",
     ],
   },
 };
