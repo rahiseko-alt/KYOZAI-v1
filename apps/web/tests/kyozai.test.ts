@@ -220,6 +220,33 @@ describe("AI構造化応答", () => {
     expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain("教材への要望");
   });
 
+  it("内容凍結QAで不整合が出たら1回だけ修復して再検査する", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const failedFreeze = { passed: false, issues: ["3場面と4場面の不整合"] };
+    const repairedMap = structuredClone(slideMap);
+    repairedMap.slides[2]!.title = "4つの場面で迷わず止める";
+    const repairedScripts = structuredClone(scripts);
+    repairedScripts.scenario[1]!.section = "4つの場面整理";
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(completed(analysis))
+      .mockResolvedValueOnce(completed(slideMap))
+      .mockResolvedValueOnce(completed(scripts))
+      .mockResolvedValueOnce(completed(failedFreeze))
+      .mockResolvedValueOnce(completed({ map: repairedMap, scripts: repairedScripts }))
+      .mockResolvedValueOnce(completed(freeze));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け15分教材を作る");
+
+    expect(result).toMatchObject({ process: { contentFreeze: { passed: true } } });
+    expect(result.slides[2]?.title).toBe("4つの場面で迷わず止める");
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    const repairBody = JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body)) as { instructions: string };
+    expect(repairBody.instructions).toContain("指摘された不整合だけを修復");
+    expect(String(fetchMock.mock.calls[4]?.[1]?.body)).toContain("3場面と4場面の不整合");
+  });
+
   it("Schema準拠でも実行時契約を外れた分析を再生成する", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const invalid = { ...analysis, finalAction: 42 };
