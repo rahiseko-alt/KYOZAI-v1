@@ -217,6 +217,7 @@ describe("AI構造化応答", () => {
     expect(freezeBody.instructions).toContain("直接引用の有無ではなく");
     expect(freezeBody.instructions).toContain("教材化のための短い言い換え");
     expect(freezeBody.instructions).toContain("新しい事実を足していなければ合格");
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain("教材への要望");
   });
 
   it("Schema準拠でも実行時契約を外れた分析を再生成する", async () => {
