@@ -51,6 +51,8 @@ describe("画像生成工程", () => {
     expect(prompt).toContain("Typography:");
     expect(prompt).toContain("Constraints:");
     expect(prompt).toContain("Avoid:");
+    expect(prompt).toContain("Forbidden text:");
+    expect(prompt).toContain("研修の到達点");
     expect(prompt).toContain(slide.title);
     expect(prompt).toContain(slide.keyMessage);
     slide.labels.forEach((label) => expect(prompt).toContain(label));
@@ -163,6 +165,20 @@ describe("画像生成工程", () => {
 
     expect(image).toMatchObject({ providerModel: "gemini-3.1-flash-lite-image" });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("画像QAは単独の番号バッジをDATA外文字として扱わない", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const png = await fixtureImage(2048, 1152, "png");
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: png.toString("base64") }] }), { status: 200 }))
+      .mockResolvedValueOnce(qaResponse(true));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(renderValidatedSlide(mockPackage, mockPackage.slides[0]!, "gpt-image-2-medium")).resolves.toMatchObject({ providerModel: "gpt-image-2-2026-04-21" });
+    const body = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body ?? "{}")) as { input?: Array<{ content?: Array<{ text?: string }> }> };
+    expect(body.input?.[0]?.content?.[0]?.text).toContain("単独の番号バッジ");
+    expect(png.length).toBeGreaterThan(100);
   });
 
   it("高エントロピー画像でもVercelのJSON応答上限に収まるPNGへ正規化する", async () => {

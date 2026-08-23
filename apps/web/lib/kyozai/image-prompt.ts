@@ -35,6 +35,7 @@ export function buildSlideImagePrompt(result: TeachingPackage, slide: Slide, ret
     `Composition: ${composition}`,
     designTokenSummary(),
     quotedList("Text (verbatim): draw only these Japanese strings exactly as written. 言い換え、翻訳、省略、文字追加をしない", exactText),
+    "Forbidden text: do not add headings or helper labels that are not listed in Text (verbatim), including 「研修の到達点」「ポイント」「まとめ」「課題」「解決策」「チェック」「STEP」「重要」.",
     "Visual hierarchy: title is the dominant conclusion headline; key message is second; bullets and labels are supporting information. Make the main visual structure immediately understandable at 25% scale.",
     "Graphics: use simple black-and-blue line diagrams, arrows, number circles, checkmarks, labels, and gray panels only when they explain the slide theme. The diagram must follow the Composition field.",
     "Constraints: 16:9, one theme per slide, white background, generous margins, no text clipping, no overlap, no dense paragraphs, no speaker notes inside the canvas, readable on a smartphone full-slide view.",
