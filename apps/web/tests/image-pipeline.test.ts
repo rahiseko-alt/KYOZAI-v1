@@ -123,12 +123,51 @@ describe("画像生成工程", () => {
     expect(firstRequest).not.toHaveProperty("tools");
   });
 
+  it("Gemini公式SDK形のoutput_image応答と16:9の1K寸法を受け入れる", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const jpeg = await fixtureImage(1024, 576, "jpeg");
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        output_image: { mime_type: "image/jpeg", data: jpeg.toString("base64") },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(qaResponse(true));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const image = await renderValidatedSlide(mockPackage, mockPackage.slides[0]!, "gemini-3.1-flash-lite-image");
+
+    expect(image).toMatchObject({ width: 1672, height: 941, providerModel: "gemini-3.1-flash-lite-image" });
+    expect(Buffer.from(image.data, "base64").length).toBeLessThan(3_200_000);
+  });
+
   it("結果不明のtimeout時は画像生成を自動再送しない", async () => {
     vi.stubEnv("GEMINI_API_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockRejectedValue(new DOMException("timeout", "TimeoutError")));
     await expect(renderValidatedSlide(mockPackage, mockPackage.slides[0]!, "gemini-3.1-flash-lite-image")).rejects.toThrow("自動再送はしていません");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+
+  it("高エントロピー画像でもVercelのJSON応答上限に収まるPNGへ正規化する", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const noisy = Buffer.alloc(1024 * 576 * 3);
+    let seed = 0x12345678;
+    for (let index = 0; index < noisy.length; index += 1) {
+      seed = (seed * 1_664_525 + 1_013_904_223) >>> 0;
+      noisy[index] = seed >>> 24;
+    }
+    const jpeg = await sharp(noisy, { raw: { width: 1024, height: 576, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: "completed",
+        steps: [{ type: "model_output", content: [{ type: "image", mime_type: "image/jpeg", data: jpeg.toString("base64") }] }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(qaResponse(true)));
+
+    const image = await renderValidatedSlide(mockPackage, mockPackage.slides[0]!, "gemini-3.1-flash-lite-image");
+
+    expect(Buffer.byteLength(JSON.stringify({ image }), "utf8")).toBeLessThan(4_500_000);
+  }, 20_000);
 
   it("GPT Image 2 Mediumを固定snapshot・medium・2048x1152で生成する", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");

@@ -15,11 +15,13 @@ export async function readPackageResponse(response: Response, fallback: string):
 }
 
 export async function readRenderedSlideResponse(response: Response): Promise<RenderedSlideImage> {
+  const text = await response.text().catch(() => "");
   let payload: { image?: RenderedSlideImage; error?: string };
   try {
-    payload = (await response.json()) as typeof payload;
+    payload = JSON.parse(text) as typeof payload;
   } catch {
-    throw new Error("画像生成の応答が途中で終了しました。もう一度お試しください。");
+    const contentType = response.headers.get("content-type") || "unknown";
+    throw new Error(`画像生成サーバーの応答を読み取れませんでした（status ${response.status}, ${contentType}）。時間を置いてもう一度お試しください。`);
   }
   if (!response.ok || !payload.image) throw new Error(payload.error || "スライド画像を生成できませんでした。");
   return payload.image;

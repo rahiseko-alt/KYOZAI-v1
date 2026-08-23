@@ -69,22 +69,16 @@ export function Workspace() {
     let completed = retained.size;
     setProgress({ phase: "images", completed, total: next.slides.length });
     const generated = new Map<number, RenderedSlideImage>();
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < pending.length) {
-        const slide = pending[cursor++];
-        if (!slide) return;
-        const response = await fetch("/api/render-slide", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ package: next, slideNumber: slide.number, imageModel: modelId, renderGrant }),
-        });
-        generated.set(slide.number, await readRenderedSlideResponse(response));
-        completed += 1;
-        setProgress({ phase: "images", completed, total: next.slides.length });
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(3, pending.length) }, () => worker()));
+    for (const slide of pending) {
+      const response = await fetch("/api/render-slide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ package: next, slideNumber: slide.number, imageModel: modelId, renderGrant }),
+      });
+      generated.set(slide.number, await readRenderedSlideResponse(response));
+      completed += 1;
+      setProgress({ phase: "images", completed, total: next.slides.length });
+    }
     const complete = next.slides.map((slide) => retained.get(slide.number) ?? generated.get(slide.number)).filter((image): image is RenderedSlideImage => Boolean(image));
     if (complete.length !== next.slides.length) throw new Error("完成画像が全ページ揃わなかったため、旧版を維持しました。");
     return complete;

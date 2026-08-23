@@ -14,9 +14,14 @@ const DELIVERY_WIDTH = 1672 as const;
 const DELIVERY_HEIGHT = 941 as const;
 const QA_MODEL = "gpt-5.5";
 const OPENAI_IMAGE_MODEL = "gpt-image-2-2026-04-21";
+const MAX_IMAGE_BYTES_FOR_JSON_RESPONSE = 3_200_000;
+const RENDER_ROUTE_BUDGET_MS = 225_000;
+const IMAGE_GENERATION_TIMEOUT_MS = 150_000;
+const IMAGE_QA_TIMEOUT_MS = 60_000;
+const DEADLINE_BUFFER_MS = 5_000;
 
 type VisualReview = { passed: boolean; issues: string[]; checks: string[] };
-type SourceImage = { bytes: Buffer; format: "jpeg" | "png"; width: number; height: number; providerModel: string; providerQuality: "1K" | "medium" };
+type SourceImage = { bytes: Buffer; format: "jpeg" | "png"; providerModel: string; providerQuality: "1K" | "medium" };
 
 function hash(value: string | Buffer) {
   return createHash("sha256").update(value).digest("hex");
@@ -27,9 +32,15 @@ function decodeBase64(value: unknown) {
   return Buffer.from(value, "base64");
 }
 
-async function providerFetch(url: string, init: RequestInit, operation: string) {
+function timeoutBefore(deadlineMs: number, preferredMs: number, reserveMs = DEADLINE_BUFFER_MS) {
+  const timeoutMs = Math.min(preferredMs, deadlineMs - Date.now() - reserveMs);
+  if (timeoutMs < 5_000) throw new Error(`${reserveMs > DEADLINE_BUFFER_MS ? "画像生成" : "画像処理"}の残り時間が足りません。時間を置いてもう一度お試しください。`);
+  return timeoutMs;
+}
+
+async function providerFetch(url: string, init: RequestInit, operation: string, timeoutMs: number) {
   try {
-    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(50_000) });
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
     if (!response.ok) throw new Error(`${operation}が応答を完了できませんでした (${response.status})。`);
     return response;
   } catch (error) {
@@ -46,7 +57,27 @@ function hasMagic(bytes: Buffer, format: "jpeg" | "png") {
     : bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"));
 }
 
-async function generateGemini(modelId: Extract<ImageModelId, `gemini-${string}`>, prompt: string) {
+function geminiImageBlocks(payload: unknown) {
+  const blocks: Array<{ data?: unknown; mime_type?: unknown }> = [];
+  if (!payload || typeof payload !== "object") return blocks;
+  const outputImage = (payload as { output_image?: unknown }).output_image;
+  if (outputImage && typeof outputImage === "object") blocks.push(outputImage as { data?: unknown; mime_type?: unknown });
+  const steps = (payload as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return blocks;
+  for (const step of steps) {
+    if (!step || typeof step !== "object" || (step as { type?: unknown }).type !== "model_output") continue;
+    const content = (step as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block && typeof block === "object" && (block as { type?: unknown }).type === "image") {
+        blocks.push(block as { data?: unknown; mime_type?: unknown });
+      }
+    }
+  }
+  return blocks;
+}
+
+async function generateGemini(modelId: Extract<ImageModelId, `gemini-${string}`>, prompt: string, timeoutMs: number) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Gemini画像生成の接続が未設定です。管理者へお問い合わせください。");
   const response = await providerFetch(GEMINI_URL, {
@@ -57,20 +88,17 @@ async function generateGemini(modelId: Extract<ImageModelId, `gemini-${string}`>
       input: [{ type: "text", text: prompt }],
       response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: "16:9", image_size: "1K" },
     }),
-  }, "Gemini画像生成");
-  const payload = await response.json() as { status?: string; steps?: Array<{ type?: unknown; content?: unknown }> };
-  if (payload.status !== "completed" || !Array.isArray(payload.steps)) throw new Error("Gemini画像生成が完了状態を返しませんでした。");
-  const modelOutputs = payload.steps.filter((step) => step.type === "model_output");
-  const content = modelOutputs.flatMap((step) => Array.isArray(step.content) ? step.content : []);
-  const blocks = content.filter((block): block is { type: "image"; data?: unknown; mime_type?: unknown } => Boolean(block && typeof block === "object" && (block as { type?: unknown }).type === "image"));
-  if (content.length !== 1) throw new Error("Gemini画像生成に画像以外または複数の出力が含まれました。");
+  }, "Gemini画像生成", timeoutMs);
+  const payload = await response.json() as { status?: string; output_image?: unknown; steps?: unknown };
+  if (payload.status && payload.status !== "completed") throw new Error("Gemini画像生成が完了状態を返しませんでした。");
+  const blocks = geminiImageBlocks(payload);
   if (blocks.length !== 1 || blocks[0]?.mime_type !== "image/jpeg") throw new Error("Gemini画像生成の出力が1枚のJPEGではありませんでした。");
   const bytes = decodeBase64(blocks[0].data);
   if (!hasMagic(bytes, "jpeg")) throw new Error("Gemini画像生成の実バイトがJPEGではありませんでした。");
-  return { bytes, format: "jpeg", width: 1376, height: 768, providerModel: modelId, providerQuality: "1K" } satisfies SourceImage;
+  return { bytes, format: "jpeg", providerModel: modelId, providerQuality: "1K" } satisfies SourceImage;
 }
 
-async function generateOpenAi(prompt: string) {
+async function generateOpenAi(prompt: string, timeoutMs: number) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OpenAI画像生成の接続が未設定です。管理者へお問い合わせください。");
   const response = await providerFetch(OPENAI_IMAGE_URL, {
@@ -85,28 +113,31 @@ async function generateOpenAi(prompt: string) {
       output_format: "png",
       background: "opaque",
     }),
-  }, "OpenAI画像生成");
+  }, "OpenAI画像生成", timeoutMs);
   const payload = await response.json() as { data?: Array<{ b64_json?: string }> };
   if (payload.data?.length !== 1) throw new Error("OpenAI画像生成の出力が1枚ではありませんでした。");
   const bytes = decodeBase64(payload.data[0]?.b64_json);
   if (!hasMagic(bytes, "png")) throw new Error("OpenAI画像生成の実バイトがPNGではありませんでした。");
-  return { bytes, format: "png", width: 2048, height: 1152, providerModel: OPENAI_IMAGE_MODEL, providerQuality: "medium" } satisfies SourceImage;
+  return { bytes, format: "png", providerModel: OPENAI_IMAGE_MODEL, providerQuality: "medium" } satisfies SourceImage;
 }
 
-async function generateImage(modelId: ImageModelId, prompt: string) {
-  if (IMAGE_MODELS[modelId].provider === "google") return generateGemini(modelId as Extract<ImageModelId, `gemini-${string}`>, prompt);
-  return generateOpenAi(prompt);
+async function generateImage(modelId: ImageModelId, prompt: string, timeoutMs: number) {
+  if (IMAGE_MODELS[modelId].provider === "google") return generateGemini(modelId as Extract<ImageModelId, `gemini-${string}`>, prompt, timeoutMs);
+  return generateOpenAi(prompt, timeoutMs);
 }
 
 async function normalizeAndInspect(input: SourceImage) {
   const source = await sharp(input.bytes, { failOn: "warning" }).metadata();
-  if (source.format !== input.format || source.width !== input.width || source.height !== input.height) throw new Error("生成画像の実形式または寸法がprovider契約と一致しません。");
+  if (source.format !== input.format || !source.width || !source.height) throw new Error("生成画像の実形式または寸法がprovider契約と一致しません。");
   if (Math.abs((source.width / source.height) - (16 / 9)) > 0.03) throw new Error("生成画像の比率が16:9ではありません。");
   const normalized = await sharp(input.bytes, { failOn: "warning" })
     .rotate()
     .resize(DELIVERY_WIDTH, DELIVERY_HEIGHT, { fit: "contain", background: "white" })
-    .png({ compressionLevel: 9 })
+    .png({ compressionLevel: 6, palette: true, colors: 128, effort: 4 })
     .toBuffer();
+  if (normalized.length > MAX_IMAGE_BYTES_FOR_JSON_RESPONSE) {
+    throw new Error("完成画像が大きすぎるため、現在のJSON返却経路では安全に送信できません。画像保存経路の実装が必要です。");
+  }
   const image = sharp(normalized, { failOn: "warning" });
   const [metadata, stats] = await Promise.all([image.metadata(), image.stats()]);
   if (metadata.width !== DELIVERY_WIDTH || metadata.height !== DELIVERY_HEIGHT || metadata.format !== "png") {
@@ -128,7 +159,7 @@ function outputText(payload: unknown) {
   return "";
 }
 
-async function visualReview(image: Buffer, slide: Slide): Promise<VisualReview> {
+async function visualReview(image: Buffer, slide: Slide, timeoutMs: number): Promise<VisualReview> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("画像QAの接続が未設定です。管理者へお問い合わせください。");
   const response = await providerFetch(OPENAI_RESPONSES_URL, {
@@ -166,7 +197,7 @@ async function visualReview(image: Buffer, slide: Slide): Promise<VisualReview> 
       },
       max_output_tokens: 1200,
     }),
-  }, "画像QA");
+  }, "画像QA", timeoutMs);
   const payload = await response.json() as { status?: string; output?: unknown[]; error?: { message?: string } };
   if (payload.status !== "completed") throw new Error("画像QAが完了状態を返しませんでした。");
   const text = outputText(payload);
@@ -181,11 +212,11 @@ async function visualReview(image: Buffer, slide: Slide): Promise<VisualReview> 
   return review;
 }
 
-export async function renderValidatedSlide(result: TeachingPackage, slide: Slide, modelId: ImageModelId): Promise<RenderedSlideImage> {
+export async function renderValidatedSlide(result: TeachingPackage, slide: Slide, modelId: ImageModelId, deadlineMs = Date.now() + RENDER_ROUTE_BUDGET_MS): Promise<RenderedSlideImage> {
   let retryIssues: string[] = [];
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const prompt = buildSlideImagePrompt(result, slide, retryIssues);
-    const source = await generateImage(modelId, prompt);
+    const source = await generateImage(modelId, prompt, timeoutBefore(deadlineMs, IMAGE_GENERATION_TIMEOUT_MS, IMAGE_QA_TIMEOUT_MS + DEADLINE_BUFFER_MS));
     let normalized: Buffer;
     try {
       normalized = await normalizeAndInspect(source);
@@ -196,10 +227,10 @@ export async function renderValidatedSlide(result: TeachingPackage, slide: Slide
       }
       throw error;
     }
-    const review = await visualReview(normalized, slide);
+    const review = await visualReview(normalized, slide, timeoutBefore(deadlineMs, IMAGE_QA_TIMEOUT_MS));
     if (!review.passed) {
       retryIssues = review.issues.length ? review.issues : ["表示文字とレイアウトを再確認する"];
-      if (attempt === 1) continue;
+      if (attempt === 1 && deadlineMs - Date.now() > IMAGE_QA_TIMEOUT_MS + DEADLINE_BUFFER_MS) continue;
       throw new Error(`画像QAに合格しませんでした: ${retryIssues.join(" / ")}`);
     }
     return {

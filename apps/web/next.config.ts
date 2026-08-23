@@ -5,6 +5,19 @@ import path from "node:path";
 // （AGENTS.md「結合を増やさない」1）。ここには重ねて書かない。
 const nextConfig: NextConfig = {
   turbopack: { root: path.resolve(__dirname, "../..") },
+  outputFileTracingIncludes: {
+    "/api/render-slide": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/sharp-linux-x64/**/*",
+      "node_modules/@img/sharp-libvips-linux-x64/**/*",
+      "node_modules/.pnpm/sharp@*/node_modules/sharp/**/*",
+      "node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**/*",
+      "node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**/*",
+      "../../node_modules/.pnpm/sharp@*/node_modules/sharp/**/*",
+      "../../node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**/*",
+      "../../node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**/*",
+    ],
+  },
 };
 
 export default nextConfig;

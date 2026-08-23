@@ -9,8 +9,10 @@ import { isTeachingPackage } from "../../../lib/kyozai/schema";
 
 export const runtime = "nodejs";
 export const maxDuration = 240;
+const RENDER_ROUTE_BUDGET_MS = 225_000;
 
 export async function POST(request: Request) {
+  const deadlineMs = Date.now() + RENDER_ROUTE_BUDGET_MS;
   if (!isProcessParityPipelineEnabled()) return NextResponse.json({ error: "画像生成工程は現在開発中です。" }, { status: 503 });
   if (!rateLimit(`render-slide:${clientKey(request)}`, 40)) return NextResponse.json({ error: "画像生成の上限に達しました。15分ほど空けてお試しください。" }, { status: 429 });
   try {
@@ -26,7 +28,7 @@ export async function POST(request: Request) {
     const e2eMode = process.env.KYOZAI_E2E_MODE === "1" && process.env.VERCEL_ENV !== "production";
     const image = e2eMode
       ? await mockRenderedSlide(body.package, slide, body.imageModel)
-      : await renderValidatedSlide(body.package, slide, body.imageModel);
+      : await renderValidatedSlide(body.package, slide, body.imageModel, deadlineMs);
     return NextResponse.json({ image });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "スライド画像を生成できませんでした。" }, { status: 400 });

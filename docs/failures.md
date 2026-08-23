@@ -1457,3 +1457,15 @@ pnpmワークスペースルートの`next`を解決できずビルドが失敗�
 その未追跡生成物が作業フォルダに残り、`pnpm --filter web lint`がTurbopack生成JSを検査して失敗した。
 生成物は品質検査対象ではないため、eslintのignoreを`.next*/**`へ広げ、通常の`.next`と退避名の両方を
 lint対象外にした。テストやlintルール自体は緩和していない。
+
+## 2026-08-23 本番画像生成でsharp/libvipsのバンドル不足を見落とした
+
+本番`/api/render-slide`は画像生成APIへ到達する前後で`sharp`を読み込むが、VercelのLinux実行環境で
+`@img/sharp-libvips-linux-x64`が関数バンドルに入らず、`libvips-cpp.so`を読めずにクラッシュした。
+クライアント側は非JSONのサーバーエラーを`response.json()`で読もうとしていたため、利用者には
+「画像生成の応答が途中で終了しました」とだけ表示され、根本原因が隠れた。
+
+本番ログを確認せずに「画像生成工程まで到達する」と判断したのが誤りだった。`sharp`をVercelで
+安定して動く版へ固定し、Linux native依存を`outputFileTracingIncludes`へ明示し、install時に
+optional依存を有効にする。さらに完成PNGをbase64 JSONで返す設計はVercelの4.5MB応答上限に当たるため、
+PNGをパレット最適化し、上限超過を実画像テストで検出する。
