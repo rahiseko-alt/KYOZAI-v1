@@ -42,6 +42,15 @@ describe("画像生成工程", () => {
   it("凍結した表示文字を画像promptへ一字一句含める", () => {
     const slide = mockPackage.slides[1]!;
     const prompt = buildSlideImagePrompt(mockPackage, slide);
+    expect(prompt).toContain("Use case: productivity-visual / scientific-educational");
+    expect(prompt).toContain("Asset type: Japanese teaching slide");
+    expect(prompt).toContain("Primary request: 確定済みの1スライドを完成画像として描画");
+    expect(prompt).toContain("Text (verbatim)");
+    expect(prompt).toContain("Composition:");
+    expect(prompt).toContain("Color palette:");
+    expect(prompt).toContain("Typography:");
+    expect(prompt).toContain("Constraints:");
+    expect(prompt).toContain("Avoid:");
     expect(prompt).toContain(slide.title);
     expect(prompt).toContain(slide.keyMessage);
     slide.labels.forEach((label) => expect(prompt).toContain(label));

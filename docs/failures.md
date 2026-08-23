@@ -1450,3 +1450,10 @@ pnpmワークスペースルートの`next`を解決できずビルドが失敗�
 1回のAPI応答で完成教材を返す前提のままで4件失敗した。また工程コードを通信処理と同じファイルへ
 追加し、300行上限lintにも失敗した。検査は緩めず、各段階の応答を検証するテストへ置き換え、
 教材工程を`content-generation.ts`へ分離した。最終的にtypecheck、lint、42テストを通した。
+
+## 2026-08-23 退避したNext.js生成物をlint対象に残した
+
+過去にWindows/OneDrive上の`.next`削除がEPERMで失敗した際、`.next.stale-build-lock`へ退避したが、
+その未追跡生成物が作業フォルダに残り、`pnpm --filter web lint`がTurbopack生成JSを検査して失敗した。
+生成物は品質検査対象ではないため、eslintのignoreを`.next*/**`へ広げ、通常の`.next`と退避名の両方を
+lint対象外にした。テストやlintルール自体は緩和していない。
