@@ -50,9 +50,9 @@ export function Workspace() {
 
   const onFiles = (incoming: FileList | null) => {
     if (!incoming) return;
-    const accepted = Array.from(incoming).filter((file) => ["application/pdf", "text/plain", "text/markdown"].includes(file.type) || /\.(txt|md)$/i.test(file.name));
+    const accepted = Array.from(incoming).filter((file) => file.size <= 2 * 1024 * 1024 && (["application/pdf", "text/plain", "text/markdown"].includes(file.type) || /\.(txt|md)$/i.test(file.name)));
     setFiles(accepted.slice(0, 2));
-    if (accepted.length !== incoming.length) setError("体験版はPDF・TXT・Markdownに対応しています。PowerPoint・Wordは開発中です。");
+    if (accepted.length !== incoming.length) setError("PDF・TXT・Markdownの2MB以下のファイルを指定してください。");
     else setError("");
   };
 
@@ -236,7 +236,7 @@ function InputView(props: InputProps) {
           >
             <UploadCloud size={34} />
             <strong>ファイルを選択またはドロップ</strong>
-            <span>PDF・TXT・Markdown / 1ファイル8MBまで / 最大2件</span>
+            <span>PDF・TXT・Markdown / 1ファイル2MBまで / 最大2件</span>
           </button>
           <input ref={inputRef} className="sr-only" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" multiple onChange={(event) => props.onFiles(event.target.files)} />
           {props.files.length > 0 && <div className="file-list">{props.files.map((file) => <div key={file.name}><FileText size={18} /><span>{file.name}</span><small>{(file.size / 1024).toFixed(0)} KB</small></div>)}</div>}

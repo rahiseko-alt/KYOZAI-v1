@@ -1469,3 +1469,27 @@ lint対象外にした。テストやlintルール自体は緩和していない
 安定して動く版へ固定し、Linux native依存を`outputFileTracingIncludes`へ明示し、install時に
 optional依存を有効にする。さらに完成PNGをbase64 JSONで返す設計はVercelの4.5MB応答上限に当たるため、
 PNGをパレット最適化し、上限超過を実画像テストで検出する。
+
+## 2026-08-24 公開生成経路の境界防御と運用文書が不足していた
+
+公開APPのクロスレビューで、画像生成grantの署名鍵がOpenAI API鍵へfallbackする用途混在、
+プロセス内Mapだけのレート制限、DNS検査後にfetchが再解決するSSRFのTOCTOU、chunked応答を
+全量読み込んだ後に切り詰める無制限ボディ読み込みが見つかった。最も費用と情報流出の影響が
+大きい公開境界に、private IP、DNS rebinding、実受信量、複数インスタンスの回帰テストが無かった。
+
+また、`.env.example`の停止値を本番状態と取り違えられる構成だったが、実際のProductionには
+`PROCESS_PARITY_PIPELINE_ENABLED=1`が設定済みだった。リポジトリの既定値だけを本番稼働状態の
+証拠にしてはならない。本番は環境変数で上書きできないコード境界で生成UIとAPIを封鎖し、
+healthのcommit SHAとProductionへのHTTP検査を外部事実として確認する。
+
+READMEは旧リポジトリ名と旧Skill 1件だけを案内し、KYOZAI-v1の6つの正本Skill、公開APP、
+限定公開状態から乖離していた。独自auto-mergeも人間承認を要求せず、Production smokeはpresetに
+留まって実行されていなかった。READMEを現行構成へ更新し、auto-mergeを廃止して、CI、最新差分への
+承認1名、会話解決、管理者への規則適用をbranch protectionで必須化する。
+
+## 2026-08-24 手動本番配備へ誤ったcommit SHAを指定した
+
+Git連携を使わないVercel配備の証拠を`/api/health`へ載せる際、配備直前に`git rev-parse HEAD`を
+取得せず、誤った文字列を`KYOZAI_DEPLOY_COMMIT_SHA`へ指定した。生成APIの404封鎖には影響せず、
+healthの配備元証拠だけが実commitと不一致になった。配備コマンド内で`git rev-parse HEAD`を取得し、
+その出力を直接環境変数へ渡して再配備する。SHAを目視で転記・補完しない。
