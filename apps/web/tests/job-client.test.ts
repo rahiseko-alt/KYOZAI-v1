@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { artifactDownloadPath, fetchJobSnapshot, getJobIdFromSearch, isTerminalJobStatus, pollDelayMs, writeJobIdToUrl } from "../lib/kyozai/job-client";
+import { artifactDownloadPath, fetchJobArtifact, fetchJobSnapshot, getJobIdFromSearch, isTerminalJobStatus, pollDelayMs, writeJobIdToUrl } from "../lib/kyozai/job-client";
 
 describe("永続jobクライアント", () => {
   it("URLから安全なjob IDだけを復元する", () => {
@@ -28,6 +28,19 @@ describe("永続jobクライアント", () => {
 
   it("成果物は署名URLを埋め込まず、所有権確認APIへ渡す", () => {
     expect(artifactDownloadPath("job_123", "artifact_456")).toBe("/api/jobs/job_123/artifacts/artifact_456");
+  });
+
+  it("成果物取得には呼出元の認証fetcherを使う", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const blob = await fetchJobArtifact("job_123", "artifact_456", async (input, init) => {
+      calls.push({ input, init });
+      return new Response("zip", { status: 200, headers: { "Content-Type": "application/zip" } });
+    });
+
+    expect(await blob.text()).toBe("zip");
+    expect(calls[0]?.input).toBe("/api/jobs/job_123/artifacts/artifact_456");
+    expect(calls[0]?.init?.credentials).toBe("same-origin");
+    await expect(fetchJobArtifact("job", "artifact", async () => new Response("no", { status: 401 }))).rejects.toThrow("artifact_request_failed:401");
   });
 
   it("job状態だけを取得し、失敗HTTPを成功扱いしない", async () => {

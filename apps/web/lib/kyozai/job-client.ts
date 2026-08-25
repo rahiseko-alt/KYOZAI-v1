@@ -45,6 +45,20 @@ export async function fetchJobSnapshot(jobId: string, fetcher: FetchLike = fetch
   return await response.json() as KyozaiJobSnapshot;
 }
 
+/**
+ * Fetches a private artifact through the authenticated app route.  Artifact
+ * endpoints deliberately require a bearer token, so a plain anchor navigation
+ * cannot be used: browser storage is not sent as an Authorization header.
+ */
+export async function fetchJobArtifact(jobId: string, artifactId: string, fetcher: FetchLike = fetch): Promise<Blob> {
+  const response = await fetcher(artifactDownloadPath(jobId, artifactId), {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw new Error(`artifact_request_failed:${response.status}`);
+  return response.blob();
+}
+
 export function artifactDownloadPath(jobId: string, artifactId: string): string {
   return `/api/jobs/${encodeURIComponent(jobId)}/artifacts/${encodeURIComponent(artifactId)}`;
 }

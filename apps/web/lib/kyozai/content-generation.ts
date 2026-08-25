@@ -177,6 +177,9 @@ export async function generatePackage(sources: SourceInput[], request: string, d
     freeze = await reviewContentFreeze(sources, request, analysis, map, scripts, deadlineMs);
   }
   await observe?.("content_freeze", freeze);
+  if (!freeze.passed || freeze.issues.length > 0) {
+    throw new Error("内容凍結QAに合格しなかったため、画像生成を開始しません。");
+  }
   const teachingPackage = buildTeachingPackage(sources, analysis, map, scripts, freeze, process.env.OPENAI_MODEL || "gpt-5.5");
   await observe?.("design", { designProfile: teachingPackage.designProfile, slides: teachingPackage.slides.map(({ number, layoutFamily, labels, composition }) => ({ number, layoutFamily, labels, composition })) });
   return teachingPackage;

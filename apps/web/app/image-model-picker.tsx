@@ -1,4 +1,4 @@
-import { IMAGE_MODELS, type ImageModelId } from "@/lib/kyozai/image-models";
+import { IMAGE_MODELS, type ImageModelId } from "../lib/kyozai/image-models";
 
 export function ImageModelPicker({ value, onChange }: { value: ImageModelId | null; onChange: (value: ImageModelId) => void }) {
   return (
