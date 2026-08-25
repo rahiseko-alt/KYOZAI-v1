@@ -2,12 +2,15 @@ import { readBoundedText } from "../../../lib/kyozai/bounded-body";
 import { badRequest, publicErrorResponse } from "../../../lib/kyozai/http-errors";
 import { requireAsyncJobsEnabled, requireJobUser } from "../../../lib/kyozai/job-auth";
 import { createJob, listJobs, type CreateJobRequest } from "../../../lib/kyozai/job-store";
+import { DURABLE_JOB_RATE_LIMIT_POLICY } from "../../../lib/kyozai/generation-policy";
+import { enforceRateLimit } from "../../../lib/kyozai/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
     requireAsyncJobsEnabled();
+    await enforceRateLimit(request, DURABLE_JOB_RATE_LIMIT_POLICY);
     const user = await requireJobUser(request);
     const idempotencyKey = request.headers.get("idempotency-key")?.trim();
     if (!idempotencyKey) throw badRequest("Idempotency-Keyを指定してください。");

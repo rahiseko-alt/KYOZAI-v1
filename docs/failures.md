@@ -1518,3 +1518,8 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 以後、外部課金APIまたは外部URL取得を公開する変更は、実装着手前に「誰が呼べるか、1回の最大費用、
 全体停止条件、入力が到達する先、responseをいつどこへ保存するか、provider停止時の挙動」を設計書と
 テスト計画へ固定する。この項目が未決定なら、公開生成を有効にしない。
+## 2026-08-25 永続jobのschemaを完成実装と取り違えた
+
+永続job用のテーブル、RLS、outbox、Workflow SDKを追加した段階で、実際に受理jobが起動・中断回復・費用制限・成果物検証まで到達するかを破壊試験で確認しなかった。Production Cronは内部routeを404にして起動不能、Previewには定期dispatcherがなくpendingのまま停止した。また所有者向け`for all` RLSが受付後の入力・画像モデル・状態を本人に書き換え可能にしていた。schemaを置くことは境界を実装した証拠ではない。
+
+今後は、公開前に少なくとも「dispatcher開始直後の喪失」「Workflow step停止」「期限切れlease」「同時配送」「provider呼出直前の予算確認」「Storage読戻しhash不一致」「所有者の直接更新」を意図的に壊して検証する。これらのいずれかがfail-closedでない限り、Productionの生成経路は404のまま維持する。

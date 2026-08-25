@@ -13,8 +13,8 @@ describe("内部Cron dispatch境界", () => {
     expect(isAuthorizedCronRequest(new Request("https://example.test", { headers: { authorization: `Bearer ${secret}` } }), env)).toBe(true);
   });
 
-  it("Productionではsecretがあってもdispatchを有効にしない", () => {
-    expect(isInternalDispatchAvailable({ CRON_SECRET: secret, VERCEL_ENV: "production" })).toBe(false);
+  it("Productionでは正しいsecretを持つ内部Cronだけを有効にする", () => {
+    expect(isInternalDispatchAvailable({ CRON_SECRET: secret, VERCEL_ENV: "production" })).toBe(true);
     expect(isInternalDispatchAvailable({ CRON_SECRET: secret, VERCEL_ENV: "preview" })).toBe(true);
     expect(isInternalDispatchAvailable({ VERCEL_ENV: "preview" })).toBe(false);
   });

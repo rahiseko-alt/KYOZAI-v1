@@ -1,7 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { createServerSupabaseClient } from "../supabase/server";
-import { isPublicProduction } from "./generation-access";
 import { start } from "workflow/api";
 import { durableKyozaiJobWorkflow } from "../../workflows/kyozai-job-workflow";
 
@@ -10,6 +9,7 @@ export type ClaimedWorkflowDispatch = {
   jobId: string;
   revisionId: string;
   attempts: number;
+  leaseOwner: string;
 };
 
 export type InternalDispatchResult =
@@ -17,7 +17,7 @@ export type InternalDispatchResult =
   | { claimed: true; dispatchId: string; jobId: string; attempts: number; workflowRunId: string };
 
 export class InternalDispatchError extends Error {
-  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "dispatch_complete_failed" | "dispatch_requeue_failed") {
+  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "workflow_start_uncertain" | "dispatch_complete_failed" | "dispatch_lease_lost" | "dispatch_requeue_failed") {
     super(code);
   }
 }
@@ -38,14 +38,15 @@ export function isAuthorizedCronRequest(request: Request, env: Record<string, st
 }
 
 export function isInternalDispatchAvailable(env: Record<string, string | undefined> = process.env) {
-  return !isPublicProduction(env) && Boolean(env.CRON_SECRET?.trim());
+  return Boolean(env.CRON_SECRET?.trim());
 }
 
 function asClaimedDispatch(value: unknown): ClaimedWorkflowDispatch | undefined {
   if (!value || typeof value !== "object") return undefined;
   const row = value as Record<string, unknown>;
-  if (typeof row.id !== "string" || typeof row.job_id !== "string" || typeof row.revision_id !== "string" || !Number.isInteger(row.attempts)) return undefined;
-  return { id: row.id, jobId: row.job_id, revisionId: row.revision_id, attempts: row.attempts as number };
+  if (typeof row.id !== "string" || typeof row.job_id !== "string" || typeof row.revision_id !== "string"
+    || typeof row.lease_owner !== "string" || !Number.isInteger(row.attempts)) return undefined;
+  return { id: row.id, jobId: row.job_id, revisionId: row.revision_id, attempts: row.attempts as number, leaseOwner: row.lease_owner };
 }
 
 export async function claimOneWorkflowDispatch(): Promise<ClaimedWorkflowDispatch | undefined> {
@@ -59,23 +60,33 @@ export async function claimOneWorkflowDispatch(): Promise<ClaimedWorkflowDispatc
   return claimed;
 }
 
-export async function requeueWorkflowDispatch(dispatchId: string, errorCode: string) {
-  const { error } = await createServerSupabaseClient().rpc("requeue_kyozai_workflow_dispatch", {
+export async function requeueWorkflowDispatch(dispatchId: string, leaseOwner: string, errorCode: string) {
+  const { error } = await createServerSupabaseClient().rpc("requeue_kyozai_workflow_dispatch_v2", {
     p_dispatch_id: dispatchId,
+    p_lease_owner: leaseOwner,
     p_error_code: errorCode,
   });
   if (error) throw new InternalDispatchError("dispatch_requeue_failed");
 }
 
-export async function completeWorkflowDispatch(dispatchId: string) {
-  const { data, error } = await createServerSupabaseClient().rpc("complete_kyozai_workflow_dispatch", {
+export async function completeWorkflowDispatch(dispatchId: string, leaseOwner: string) {
+  const { data, error } = await createServerSupabaseClient().rpc("complete_kyozai_workflow_dispatch_v2", {
     p_dispatch_id: dispatchId,
+    p_lease_owner: leaseOwner,
   });
   if (error || data !== true) throw new InternalDispatchError("dispatch_complete_failed");
 }
 
 export async function startClaimedWorkflow(dispatch: ClaimedWorkflowDispatch): Promise<string> {
-  const run = await start(durableKyozaiJobWorkflow, [{ dispatchId: dispatch.id, jobId: dispatch.jobId, revisionId: dispatch.revisionId }]);
+  const run = await start(durableKyozaiJobWorkflow, [{ dispatchId: dispatch.id, jobId: dispatch.jobId, revisionId: dispatch.revisionId, leaseOwner: dispatch.leaseOwner }]);
+  const { data, error } = await createServerSupabaseClient().rpc("record_kyozai_workflow_started", {
+    p_dispatch_id: dispatch.id,
+    p_lease_owner: dispatch.leaseOwner,
+    p_workflow_run_id: run.runId,
+  });
+  // start() already accepted the work. Requeueing here could create a second
+  // live Workflow, so retain the lease and let expiry recovery decide later.
+  if (error || data !== true) throw new InternalDispatchError("workflow_start_uncertain");
   return run.runId;
 }
 
@@ -87,11 +98,20 @@ export async function runOneInternalDispatch(): Promise<InternalDispatchResult> 
     return { claimed: true, dispatchId: dispatch.id, jobId: dispatch.jobId, attempts: dispatch.attempts, workflowRunId };
   } catch (error) {
     const code = error instanceof InternalDispatchError ? error.code : "workflow_start_failed";
+    if (code === "workflow_start_uncertain") throw error;
     try {
-      await requeueWorkflowDispatch(dispatch.id, code);
+      await requeueWorkflowDispatch(dispatch.id, dispatch.leaseOwner, code);
     } catch {
       throw new InternalDispatchError("dispatch_requeue_failed");
     }
     throw new InternalDispatchError("workflow_start_failed");
   }
+}
+
+export async function renewWorkflowDispatchLease(dispatchId: string, leaseOwner: string) {
+  const { data, error } = await createServerSupabaseClient().rpc("renew_kyozai_workflow_dispatch_lease", {
+    p_dispatch_id: dispatchId,
+    p_lease_owner: leaseOwner,
+  });
+  if (error || data !== true) throw new InternalDispatchError("dispatch_lease_lost");
 }
