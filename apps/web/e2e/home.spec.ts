@@ -2,33 +2,25 @@ import { expect, test } from "@playwright/test";
 
 import { HOME_HEADING } from "../lib/content";
 
-test("E2E fixtureでログイン、添付upload、job進捗、ZIP取得まで完走する", async ({ page }) => {
+test("公開Productionは教材生成を提供せず、ポートフォリオを表示する", async ({ page }) => {
   await page.goto("/");
+
   await expect(page.getByRole("heading", { name: HOME_HEADING })).toBeVisible();
-
-  await page.getByLabel("メールアドレス").fill("e2e@example.invalid");
-  await page.getByRole("button", { name: "確認メールを送信" }).click();
-  await expect(page.getByText("E2E用の確認済みセッションを開始しました。")).toBeVisible();
-
-  await page.locator('input[type="file"]').setInputFiles({
-    name: "training.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("承認済みの保存先だけを使用する。事故時は指定窓口へ報告する。"),
-  });
-  await page.getByRole("radio", { name: /Gemini 3.1 Flash Lite Image/ }).check();
-  await page.getByRole("button", { name: "教材jobを開始" }).click();
-
-  await expect(page).toHaveURL(/\/jobs\/[0-9a-f-]+/);
-  await expect(page.getByText("教材生成の進捗")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "完成しました" })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("納品物を作成")).toBeVisible();
-
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "教材一式をダウンロード" }).click();
-  expect((await download).suggestedFilename()).toBe("kyozai-package.zip");
+  await expect(page.getByText("生成機能は現在、一般公開していません")).toBeVisible();
+  await expect(page.getByText("教材スライド")).toBeVisible();
+  await expect(page.getByText("納品ZIP")).toBeVisible();
+  await expect(page.getByRole("button", { name: /教材jobを開始|教材を作ってもらう/ })).toHaveCount(0);
 });
 
-test("@mobile 非同期job入口は横スクロールしない", async ({ page }) => {
+test("公開Productionでは全ての生成入口が404", async ({ page }) => {
+  for (const path of ["/api/generate", "/api/revise", "/api/render-slide", "/api/jobs", "/api/uploads"]) {
+    const response = await page.request.post(path, { data: {} });
+    expect(response.status(), path).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: "NOT_FOUND" });
+  }
+});
+
+test("@mobile 公開ページは横スクロールしない", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: HOME_HEADING })).toBeVisible();
   const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
