@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/jobs/dispatch",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/internal/jobs/cleanup",
+      "schedule": "17 */6 * * *"
     }
   ]
 }
