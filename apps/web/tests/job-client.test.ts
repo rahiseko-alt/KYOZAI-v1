@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fetchJobSnapshot, getJobIdFromSearch, isTerminalJobStatus, pollDelayMs, writeJobIdToUrl } from "../lib/kyozai/job-client";
+import { artifactDownloadPath, fetchJobSnapshot, getJobIdFromSearch, isTerminalJobStatus, pollDelayMs, writeJobIdToUrl } from "../lib/kyozai/job-client";
 
 describe("永続jobクライアント", () => {
   it("URLから安全なjob IDだけを復元する", () => {
@@ -24,6 +24,10 @@ describe("永続jobクライアント", () => {
     expect(pollDelayMs("queued")).toBe(3_000);
     expect(pollDelayMs("running")).toBe(2_000);
     expect(pollDelayMs("failed")).toBeUndefined();
+  });
+
+  it("成果物は署名URLを埋め込まず、所有権確認APIへ渡す", () => {
+    expect(artifactDownloadPath("job_123", "artifact_456")).toBe("/api/jobs/job_123/artifacts/artifact_456");
   });
 
   it("job状態だけを取得し、失敗HTTPを成功扱いしない", async () => {

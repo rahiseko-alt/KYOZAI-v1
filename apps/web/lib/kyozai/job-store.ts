@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { isKyozaiJobStage, type ArtifactManifestEntry, type StageLedgerEntry } from "../../../../shared/kyozai-job-contract";
+
 import { createServerSupabaseClient } from "../supabase/server";
 import { badRequest, conflict, payloadTooLarge, PublicHttpError, routeUnavailable } from "./http-errors";
 import type { AuthenticatedJobUser } from "./job-auth";
@@ -143,15 +145,43 @@ export async function createJob(user: AuthenticatedJobUser, raw: CreateJobReques
   return String(data);
 }
 
-function snapshotFromRows(job: Record<string, unknown>, revisions: Array<Record<string, unknown>>, stages: Array<Record<string, unknown>>, artifacts: Array<Record<string, unknown>>): KyozaiJobSnapshot {
-  const revision = revisions.find((item) => Number(item.revision_number) === Number(job.active_revision_number));
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function snapshotFromRows(job: Record<string, unknown>, revision: Record<string, unknown>, stages: Array<Record<string, unknown>>, artifacts: Array<Record<string, unknown>>): KyozaiJobSnapshot {
+  const currentStage = typeof job.current_stage === "string" && isKyozaiJobStage(job.current_stage) ? job.current_stage : undefined;
   return {
-    id: String(job.id), status: String(job.status) as KyozaiJobSnapshot["status"], currentStage: typeof job.current_stage === "string" ? job.current_stage : undefined,
+    id: String(job.id), status: String(job.status) as KyozaiJobSnapshot["status"], currentStage,
     revision: Number(job.active_revision_number),
-    stages: stages.map((stage) => ({ name: String(stage.stage), status: String(stage.status) as KyozaiJobSnapshot["stages"][number]["status"], attempt: Number(stage.attempt), updatedAt: typeof stage.completed_at === "string" ? stage.completed_at : typeof stage.started_at === "string" ? stage.started_at : undefined, errorCode: typeof stage.error_code === "string" ? stage.error_code : undefined })),
-    artifacts: artifacts.map((artifact) => ({ id: String(artifact.id), kind: String(artifact.kind), lifecycle: String(artifact.lifecycle) as KyozaiJobSnapshot["artifacts"][number]["lifecycle"], mediaType: String(artifact.media_type), byteSize: Number(artifact.byte_size), sha256: String(artifact.sha256), slideNumber: typeof artifact.slide_number === "number" ? artifact.slide_number : undefined })),
+    stages: stages.map((stage): StageLedgerEntry => ({
+      stage: String(stage.stage) as StageLedgerEntry["stage"],
+      status: String(stage.status) as StageLedgerEntry["status"],
+      attempt: Number(stage.attempt),
+      ...(typeof stage.slide_number === "number" && stage.slide_number > 0 ? { slideNumber: stage.slide_number } : {}),
+      ...(typeof stage.started_at === "string" ? { startedAt: stage.started_at } : {}),
+      ...(typeof stage.completed_at === "string" ? { completedAt: stage.completed_at } : {}),
+      inputArtifactIds: stringArray(stage.input_artifact_ids),
+      outputArtifactIds: stringArray(stage.output_artifact_ids),
+      validator: String(stage.validator),
+      ...(typeof stage.model === "string" ? { model: stage.model } : {}),
+      ...(stage.usage && typeof stage.usage === "object" ? { usage: stage.usage as StageLedgerEntry["usage"] } : {}),
+      ...(typeof stage.retry_reason === "string" ? { retryReason: stage.retry_reason } : {}),
+      ...(typeof stage.error_code === "string" ? { errorCode: stage.error_code } : {}),
+    })),
+    artifacts: artifacts.map((artifact): ArtifactManifestEntry => ({
+      artifactId: String(artifact.id),
+      kind: String(artifact.kind) as ArtifactManifestEntry["kind"],
+      revisionNumber: Number(revision.revision_number),
+      storagePath: String(artifact.storage_path),
+      sha256: String(artifact.sha256),
+      mediaType: String(artifact.media_type),
+      byteSize: Number(artifact.byte_size),
+      status: String(artifact.lifecycle) as ArtifactManifestEntry["status"],
+      ...(typeof artifact.slide_number === "number" ? { slideNumber: artifact.slide_number } : {}),
+    })),
     ...(typeof job.error_code === "string" ? { errorCode: job.error_code } : {}),
-    ...(revision?.status === "failed" ? { warning: "この版は完成していません。" } : {}),
+    ...(revision.status === "failed" ? { warning: "この版は完成していません。" } : {}),
   };
 }
 
@@ -161,12 +191,17 @@ export async function getJobSnapshot(user: AuthenticatedJobUser, jobId: string) 
   const { data: job, error } = await supabase.from("jobs").select("*").eq("id", jobId).eq("owner_id", user.id).maybeSingle();
   if (error) throw new Error("job_read_failed");
   if (!job) throw routeUnavailable();
-  const [{ data: revisions }, { data: stages }, { data: artifacts }] = await Promise.all([
-    supabase.from("job_revisions").select("revision_number, status").eq("job_id", jobId),
-    supabase.from("stage_runs").select("stage, status, attempt, started_at, completed_at, error_code").eq("job_id", jobId).order("created_at"),
-    supabase.from("artifacts").select("id, kind, lifecycle, media_type, byte_size, sha256, slide_number").eq("job_id", jobId).eq("lifecycle", "final").order("created_at"),
+  const { data: revision, error: revisionError } = await supabase.from("job_revisions")
+    .select("id, revision_number, status")
+    .eq("job_id", jobId)
+    .eq("revision_number", job.active_revision_number)
+    .maybeSingle();
+  if (revisionError || !revision) throw new Error("job_revision_read_failed");
+  const [{ data: stages }, { data: artifacts }] = await Promise.all([
+    supabase.from("stage_runs").select("stage, status, attempt, slide_number, started_at, completed_at, input_artifact_ids, output_artifact_ids, validator, model, usage, retry_reason, error_code").eq("job_id", jobId).eq("revision_id", revision.id).order("created_at"),
+    supabase.from("artifacts").select("id, kind, lifecycle, storage_path, media_type, byte_size, sha256, slide_number").eq("job_id", jobId).eq("revision_id", revision.id).eq("lifecycle", "final").order("created_at"),
   ]);
-  return snapshotFromRows(job, revisions ?? [], stages ?? [], artifacts ?? []);
+  return snapshotFromRows(job, revision, stages ?? [], artifacts ?? []);
 }
 
 export async function listJobs(user: AuthenticatedJobUser) {
@@ -179,9 +214,12 @@ export async function listJobs(user: AuthenticatedJobUser) {
 export async function cancelJob(user: AuthenticatedJobUser, jobId: string) {
   assertUuid(jobId, "jobを確認できません。");
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase.from("jobs").update({ status: "cancelling" }).eq("id", jobId).eq("owner_id", user.id).in("status", ["queued", "running"]).select("id").maybeSingle();
+  const { data: owned, error: ownershipError } = await supabase.from("jobs").select("id").eq("id", jobId).eq("owner_id", user.id).maybeSingle();
+  if (ownershipError) throw new Error("job_cancel_owner_check_failed");
+  if (!owned) throw routeUnavailable();
+  const { data: status, error } = await supabase.rpc("request_kyozai_job_cancellation", { p_job_id: jobId });
   if (error) throw new Error("job_cancel_failed");
-  if (!data) throw conflict("このjobはキャンセルできません。");
+  if (status !== "cancelling" && status !== "cancelled") throw conflict("このjobはキャンセルできません。");
 }
 
 export async function deleteJob(user: AuthenticatedJobUser, jobId: string) {
