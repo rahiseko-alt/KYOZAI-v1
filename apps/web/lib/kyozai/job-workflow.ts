@@ -23,6 +23,7 @@ import type { ScriptStage, SlideMap } from "./content-pipeline";
 const ARTIFACT_BUCKET = "kyozai-artifacts";
 type StoredArtifact = { id: string; storagePath: string; sha256: string; bytes: Buffer };
 type StageRun = { id: string; attempt: number; leaseOwner: string };
+export type DurableContentStage = "source_ingest" | "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design";
 function artifactPath(jobId: string, revisionId: string, lifecycle: "draft" | "validated", id: string, name: string) {
   return `${jobId}/${revisionId}/${lifecycle}/${id}-${name}`;
 }
@@ -120,9 +121,8 @@ async function storeJson(jobId: string, revisionId: string, kind: KyozaiArtifact
   return storeArtifact(jobId, revisionId, kind, name, Buffer.from(JSON.stringify(value, null, 2)), "application/json");
 }
 
-export async function loadOrCreatePackage(jobId: string, revisionId: string, request: Record<string, unknown>) {
-  const existingDesign = await existingPassedArtifact(jobId, revisionId, "design");
-  if (existingDesign) return readJsonArtifact<TeachingPackage>(existingDesign);
+export async function loadOrCreatePackage(jobId: string, revisionId: string, request: Record<string, unknown>, stopAfter?: DurableContentStage): Promise<TeachingPackage | undefined> {
+  const existingDesign = await existingPassedArtifact(jobId, revisionId, "design"); if (existingDesign) return readJsonArtifact<TeachingPackage>(existingDesign);
   const existingSources = await existingPassedArtifact(jobId, revisionId, "source_ingest");
   let sources = existingSources ? await readJsonArtifact<SourceInput[]>(existingSources) : undefined;
   if (!sources) {
@@ -135,7 +135,7 @@ export async function loadOrCreatePackage(jobId: string, revisionId: string, req
     if (!outputIds) throw new Error("source_ingest_stage_busy");
     if (!sources && outputIds[0]) sources = await readJsonArtifact<SourceInput[]>(outputIds[0]);
   }
-  if (!sources) throw new Error("durable_source_stage_unavailable");
+  if (!sources) throw new Error("durable_source_stage_unavailable"); if (stopAfter === "source_ingest") return undefined;
   const requestText = String(request.request ?? "");
 
   async function stageValue<T>(stage: Extract<KyozaiJobStage, "analysis" | "slide_map" | "script_timing">, kind: KyozaiArtifactKind, create: () => Promise<T>): Promise<T> {
@@ -153,13 +153,13 @@ export async function loadOrCreatePackage(jobId: string, revisionId: string, req
   }
 
   const fixture = process.env.KYOZAI_E2E_MODE === "1" ? structuredClone(mockPackage) : undefined;
-  const analysis = await stageValue<TeachingAnalysis>("analysis", "source_info", async () => fixture?.process!.analysis ?? generateTeachingAnalysis(sources!, requestText));
+  const analysis = await stageValue<TeachingAnalysis>("analysis", "source_info", async () => fixture?.process!.analysis ?? generateTeachingAnalysis(sources!, requestText)); if (stopAfter === "analysis") return undefined;
   const map = await stageValue<SlideMap>("slide_map", "deck_content_and_script", async () => fixture
     ? { title: fixture.title, sourceSummary: fixture.sourceSummary, learningObjectives: fixture.learningObjectives, slides: fixture.slides.map((slide) => ({ number: slide.number, layoutFamily: slide.layoutFamily, labels: slide.labels, theme: slide.theme, role: slide.role, title: slide.title, keyMessage: slide.keyMessage, bullets: slide.bullets, composition: slide.composition ?? `slide ${slide.number}の表示要素を内容に沿って配置する` })) }
-    : generateSlideMap(sources!, requestText, analysis));
+    : generateSlideMap(sources!, requestText, analysis)); if (stopAfter === "slide_map") return undefined;
   const scripts = await stageValue<ScriptStage>("script_timing", "deck_content_and_script", async () => fixture
     ? { slides: fixture.slides.map(({ number, speakerNotes }) => ({ number, speakerNotes })), scenario: fixture.scenario, faq: fixture.faq, quiz: fixture.quiz }
-    : generateScriptTiming(sources!, requestText, analysis, map));
+    : generateScriptTiming(sources!, requestText, analysis, map)); if (stopAfter === "script_timing") return undefined;
 
   const existingFreeze = await existingPassedArtifact(jobId, revisionId, "content_freeze");
   let gate: ContentFreezeGate;
@@ -180,7 +180,7 @@ export async function loadOrCreatePackage(jobId: string, revisionId: string, req
     else if (outputIds?.[0]) gate = await readJsonArtifact<ContentFreezeGate>(outputIds[0]);
     else throw new Error("content_freeze_stage_busy");
   }
-  if (!gate.review.passed || gate.review.issues.length) throw new Error("content_freeze_rejected");
+  if (!gate.review.passed || gate.review.issues.length) throw new Error("content_freeze_rejected"); if (stopAfter === "content_freeze") return undefined;
 
   const existingPackage = await existingPassedArtifact(jobId, revisionId, "design");
   if (existingPackage) return readJsonArtifact<TeachingPackage>(existingPackage);
@@ -326,4 +326,4 @@ export async function loadExecutableJob(jobId: string) {
   return job;
 }
 
-export { runKyozaiContentStages, runKyozaiJobWorkflow, runKyozaiPackagingStage, runKyozaiSlideStage } from "./job-workflow-execution";
+export { CONTENT_STAGES, runKyozaiContentStage, runKyozaiContentStages, runKyozaiJobWorkflow, runKyozaiPackagingStage, runKyozaiSlideStage } from "./job-workflow-execution";

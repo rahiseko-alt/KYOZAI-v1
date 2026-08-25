@@ -23,8 +23,12 @@ export async function durableKyozaiJobWorkflow(input: KyozaiWorkflowInput): Prom
 
 async function runDurableStages(input: KyozaiWorkflowInput): Promise<"completed" | string> {
   try {
-    await renewLeaseStep(input);
-    const { slideCount } = await runContentStep(input);
+    let slideCount = 0;
+    for (const stage of ["source_ingest", "analysis", "slide_map", "script_timing", "content_freeze", "design"] as const) {
+      await renewLeaseStep(input);
+      const content = await runContentStep(input, stage);
+      if (content) slideCount = content.slideCount;
+    }
     for (let slideNumber = 1; slideNumber <= slideCount; slideNumber += 1) {
       await renewLeaseStep(input);
       await runSlideStep(input, slideNumber);
@@ -37,10 +41,10 @@ async function runDurableStages(input: KyozaiWorkflowInput): Promise<"completed"
   }
 }
 
-async function runContentStep(input: KyozaiWorkflowInput): Promise<{ slideCount: number }> {
+async function runContentStep(input: KyozaiWorkflowInput, stage: "source_ingest" | "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design"): Promise<{ slideCount: number } | undefined> {
   "use step";
-  const { runKyozaiContentStages } = await import("../lib/kyozai/job-workflow");
-  return runKyozaiContentStages(input.jobId, input.revisionId);
+  const { runKyozaiContentStage } = await import("../lib/kyozai/job-workflow");
+  return runKyozaiContentStage(input.jobId, input.revisionId, stage);
 }
 
 async function runSlideStep(input: KyozaiWorkflowInput, slideNumber: number): Promise<void> {
