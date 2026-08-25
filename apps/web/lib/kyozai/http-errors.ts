@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 
 export type PublicErrorCode =
   | "BAD_REQUEST"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "CONFLICT"
   | "PAYLOAD_TOO_LARGE"
   | "UNSUPPORTED_MEDIA_TYPE"
   | "NOT_FOUND"
@@ -24,6 +27,18 @@ export class PublicHttpError extends Error {
 
 export function badRequest(message: string) {
   return new PublicHttpError(400, "BAD_REQUEST", message);
+}
+
+export function unauthorized(message = "ログインが必要です。") {
+  return new PublicHttpError(401, "UNAUTHORIZED", message);
+}
+
+export function forbidden(message = "この操作は許可されていません。") {
+  return new PublicHttpError(403, "FORBIDDEN", message);
+}
+
+export function conflict(message: string) {
+  return new PublicHttpError(409, "CONFLICT", message);
 }
 
 export function payloadTooLarge(message: string) {
