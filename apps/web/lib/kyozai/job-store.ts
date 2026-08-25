@@ -7,6 +7,7 @@ import { assertSafePdf, PdfInputError, pdfLimits } from "./pdf-safety";
 import { badRequest, conflict, payloadTooLarge, PublicHttpError, routeUnavailable } from "./http-errors";
 import type { AuthenticatedJobUser } from "./job-auth";
 import type { KyozaiJobSnapshot } from "./job-client";
+import { planRevision, type RevisionPlan } from "./revision-plan";
 
 const SOURCE_BUCKET = "kyozai-sources";
 const ARTIFACT_BUCKET = "kyozai-artifacts";
@@ -237,6 +238,28 @@ export async function deleteJob(user: AuthenticatedJobUser, jobId: string) {
   const { data, error } = await supabase.from("jobs").update({ status: "deleting", deleted_at: new Date().toISOString() }).eq("id", jobId).eq("owner_id", user.id).not("status", "in", "(running,cancelling)").select("id").maybeSingle();
   if (error) throw new Error("job_delete_failed");
   if (!data) throw conflict("実行中のjobは削除できません。");
+}
+
+export async function createRevisionCandidate(user: AuthenticatedJobUser, jobId: string, baseRevision: number, instruction: string): Promise<{ revisionId: string; plan: RevisionPlan }> {
+  assertUuid(jobId, "jobを確認できません。");
+  if (!Number.isInteger(baseRevision) || baseRevision < 1) throw badRequest("baseRevisionを確認してください。");
+  const text = instruction.trim();
+  if (text.length < 3 || text.length > 600) throw badRequest("修正指示を3〜600文字で入力してください。");
+  const supabase = createServerSupabaseClient();
+  const { data: base, error: baseError } = await supabase.from("job_revisions").select("id").eq("job_id", jobId).eq("revision_number", baseRevision).maybeSingle();
+  if (baseError || !base) throw routeUnavailable();
+  const { data: artifact, error: artifactError } = await supabase.from("artifacts").select("storage_bucket, storage_path").eq("revision_id", base.id).eq("kind", "deck_spec").eq("lifecycle", "final").maybeSingle();
+  if (artifactError || !artifact) throw conflict("修正元の完成版を確認できません。");
+  const { data: blob, error: downloadError } = await supabase.storage.from(artifact.storage_bucket).download(artifact.storage_path);
+  if (downloadError || !blob) throw new Error("revision_base_download_failed");
+  const deck = JSON.parse(Buffer.from(await blob.arrayBuffer()).toString("utf8")) as { slides?: Array<{ number?: unknown }> };
+  const slideNumbers = (deck.slides ?? []).map((slide) => slide.number).filter((number): number is number => Number.isInteger(number));
+  if (slideNumbers.length === 0) throw conflict("修正元のスライドを確認できません。");
+  const plan = planRevision(text, slideNumbers);
+  const { data, error } = await supabase.rpc("create_kyozai_revision_plan", { p_owner_id: user.id, p_job_id: jobId, p_base_revision_number: baseRevision, p_instruction: text, p_impact_scope: plan.impactScope });
+  if (error?.code === "40001") throw conflict("この版は更新されています。最新の版を確認してやり直してください。");
+  if (error || !data) throw new Error("revision_candidate_create_failed");
+  return { revisionId: String(data), plan };
 }
 
 export async function createArtifactRedirect(user: AuthenticatedJobUser, jobId: string, artifactId: string) {
