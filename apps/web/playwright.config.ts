@@ -28,7 +28,10 @@ export default defineConfig({
     // サーバ側の例外（Server Component / Server Action のエラー）をテストのログに出す。
     stdout: "pipe",
     stderr: "pipe",
-    env: { KYOZAI_E2E_MODE: "1", PROCESS_PARITY_PIPELINE_ENABLED: "1" },
+    // DB・AI・Storageに接続しないprocess-local fixtureで、非同期job UIの
+    // 境界だけをブラウザ検証する。Production封鎖はsecurity-boundaries.test.tsで
+    // 本番環境変数を明示して別途検証する。
+    env: { VERCEL_ENV: "preview", KYOZAI_E2E_MODE: "1", KYOZAI_ASYNC_JOBS_ENABLED: "1" },
   },
   projects: [
     { name: "chromium", grepInvert: /@mobile/, use: { ...devices["Desktop Chrome"] } },
