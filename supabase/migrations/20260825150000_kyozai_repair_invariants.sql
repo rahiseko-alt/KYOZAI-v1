@@ -21,6 +21,7 @@ alter table public.workflow_dispatches
   add column if not exists lease_expires_at timestamptz,
   add column if not exists started_at timestamptz,
   add column if not exists completed_at timestamptz;
+alter table public.quota_reservations add column if not exists inflight_image_calls integer not null default 0 check (inflight_image_calls >= 0);
 create index if not exists workflow_dispatches_recovery_idx
   on public.workflow_dispatches (status, lease_expires_at)
   where status = 'dispatched';
@@ -55,6 +56,15 @@ begin
   return found;
 end; $$;
 
+create or replace function public.renew_kyozai_workflow_dispatch_lease(p_dispatch_id uuid, p_lease_owner text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update public.workflow_dispatches set lease_expires_at = timezone('utc', now()) + interval '15 minutes'
+  where id = p_dispatch_id and status = 'dispatched' and lease_owner = p_lease_owner
+    and lease_expires_at > timezone('utc', now());
+  return found;
+end; $$;
+
 -- The worker checks this immediately before every paid provider invocation.
 -- The row lock serializes concurrent image-stage attempts and system controls.
 create or replace function public.assert_kyozai_provider_budget(p_job_id uuid, p_image_model text, p_image_calls integer)
@@ -71,16 +81,57 @@ begin
     raise exception using errcode = 'P0001', message = 'job is not executable';
   end if;
   select * into v_quota from public.quota_reservations where job_id = p_job_id for update;
-  if not found or v_quota.charge_state = 'released' or v_quota.confirmed_image_calls + p_image_calls > v_quota.reserved_image_calls then
+  if not found or v_quota.charge_state = 'released' or v_quota.confirmed_image_calls + v_quota.inflight_image_calls + p_image_calls > v_quota.reserved_image_calls then
     raise exception using errcode = 'P0001', message = 'job image quota exceeded';
   end if;
   return true;
 end; $$;
 
 revoke all on function public.record_kyozai_workflow_started(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.renew_kyozai_workflow_dispatch_lease(uuid, text) from public, anon, authenticated;
 revoke all on function public.assert_kyozai_provider_budget(uuid, text, integer) from public, anon, authenticated;
 grant execute on function public.record_kyozai_workflow_started(uuid, text, text) to service_role;
+grant execute on function public.renew_kyozai_workflow_dispatch_lease(uuid, text) to service_role;
 grant execute on function public.assert_kyozai_provider_budget(uuid, text, integer) to service_role;
+
+create or replace function public.reserve_kyozai_image_call(p_job_id uuid, p_revision_id uuid, p_stage_run_id uuid, p_model text, p_request_fingerprint text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v_quota public.quota_reservations%rowtype; v_control public.system_controls%rowtype; v_job public.jobs%rowtype;
+begin
+  select * into v_control from public.system_controls where id = true for update;
+  select * into v_job from public.jobs where id = p_job_id for update;
+  select * into v_quota from public.quota_reservations where job_id = p_job_id for update;
+  if not found or not v_control.accept_new_jobs or not (v_control.allowed_models ? p_model)
+    or v_job.status not in ('queued', 'running') or v_job.image_model <> p_model
+    or v_quota.charge_state = 'released' or v_quota.confirmed_image_calls + v_quota.inflight_image_calls + 1 > v_quota.reserved_image_calls then
+    raise exception using errcode = 'P0001', message = 'image call is unavailable';
+  end if;
+  if exists (select 1 from public.usage_events where job_id = p_job_id and request_fingerprint = p_request_fingerprint) then return true; end if;
+  insert into public.usage_events (job_id, revision_id, stage_run_id, provider, model, request_fingerprint, image_count, estimated_cost_units, charge_state)
+    values (p_job_id, p_revision_id, p_stage_run_id, 'image', p_model, p_request_fingerprint, 1, 1, 'reserved');
+  update public.quota_reservations set inflight_image_calls = inflight_image_calls + 1 where id = v_quota.id;
+  return true;
+end; $$;
+
+create or replace function public.settle_kyozai_image_call(p_job_id uuid, p_request_fingerprint text, p_charge_state public.kyozai_charge_state)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v_usage public.usage_events%rowtype; v_quota public.quota_reservations%rowtype;
+begin
+  if p_charge_state not in ('confirmed', 'ambiguous') then raise exception using errcode = '22023', message = 'invalid image settlement'; end if;
+  select * into v_usage from public.usage_events where job_id = p_job_id and request_fingerprint = p_request_fingerprint for update;
+  if not found then raise exception using errcode = 'P0001', message = 'image reservation not found'; end if;
+  if v_usage.charge_state <> 'reserved' then return true; end if;
+  select * into v_quota from public.quota_reservations where job_id = p_job_id for update;
+  update public.usage_events set charge_state = p_charge_state, actual_cost_units = 1 where id = v_usage.id;
+  update public.quota_reservations set inflight_image_calls = greatest(0, inflight_image_calls - 1),
+    confirmed_image_calls = confirmed_image_calls + 1, confirmed_cost_units = confirmed_cost_units + 1,
+    charge_state = p_charge_state where id = v_quota.id;
+  return true;
+end; $$;
+revoke all on function public.reserve_kyozai_image_call(uuid, uuid, uuid, text, text) from public, anon, authenticated;
+revoke all on function public.settle_kyozai_image_call(uuid, text, public.kyozai_charge_state) from public, anon, authenticated;
+grant execute on function public.reserve_kyozai_image_call(uuid, uuid, uuid, text, text) to service_role;
+grant execute on function public.settle_kyozai_image_call(uuid, text, public.kyozai_charge_state) to service_role;
 
 create or replace function public.record_kyozai_usage(
   p_job_id uuid, p_revision_id uuid, p_stage_run_id uuid, p_provider text,

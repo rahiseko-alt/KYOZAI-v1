@@ -23,8 +23,13 @@ export async function durableKyozaiJobWorkflow(input: KyozaiWorkflowInput): Prom
 
 async function runDurableStages(input: KyozaiWorkflowInput): Promise<"completed" | string> {
   try {
+    await renewLeaseStep(input);
     const { slideCount } = await runContentStep(input);
-    for (let slideNumber = 1; slideNumber <= slideCount; slideNumber += 1) await runSlideStep(input, slideNumber);
+    for (let slideNumber = 1; slideNumber <= slideCount; slideNumber += 1) {
+      await renewLeaseStep(input);
+      await runSlideStep(input, slideNumber);
+    }
+    await renewLeaseStep(input);
     await runPackageStep(input);
     return "completed";
   } catch (error) {
@@ -48,6 +53,12 @@ async function runPackageStep(input: KyozaiWorkflowInput): Promise<void> {
   "use step";
   const { runKyozaiPackagingStage } = await import("../lib/kyozai/job-workflow");
   await runKyozaiPackagingStage(input.jobId, input.revisionId);
+}
+
+async function renewLeaseStep(input: KyozaiWorkflowInput): Promise<void> {
+  "use step";
+  const { renewWorkflowDispatchLease } = await import("../lib/kyozai/internal-dispatch");
+  await renewWorkflowDispatchLease(input.dispatchId, input.leaseOwner);
 }
 
 async function completeDispatchStep(dispatchId: string, leaseOwner: string): Promise<void> {

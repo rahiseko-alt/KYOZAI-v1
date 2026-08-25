@@ -17,7 +17,7 @@ export type InternalDispatchResult =
   | { claimed: true; dispatchId: string; jobId: string; attempts: number; workflowRunId: string };
 
 export class InternalDispatchError extends Error {
-  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "dispatch_complete_failed" | "dispatch_requeue_failed") {
+  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "workflow_start_uncertain" | "dispatch_complete_failed" | "dispatch_requeue_failed") {
     super(code);
   }
 }
@@ -84,7 +84,9 @@ export async function startClaimedWorkflow(dispatch: ClaimedWorkflowDispatch): P
     p_lease_owner: dispatch.leaseOwner,
     p_workflow_run_id: run.runId,
   });
-  if (error || data !== true) throw new InternalDispatchError("workflow_start_failed");
+  // start() already accepted the work. Requeueing here could create a second
+  // live Workflow, so retain the lease and let expiry recovery decide later.
+  if (error || data !== true) throw new InternalDispatchError("workflow_start_uncertain");
   return run.runId;
 }
 
@@ -96,6 +98,7 @@ export async function runOneInternalDispatch(): Promise<InternalDispatchResult> 
     return { claimed: true, dispatchId: dispatch.id, jobId: dispatch.jobId, attempts: dispatch.attempts, workflowRunId };
   } catch (error) {
     const code = error instanceof InternalDispatchError ? error.code : "workflow_start_failed";
+    if (code === "workflow_start_uncertain") throw error;
     try {
       await requeueWorkflowDispatch(dispatch.id, dispatch.leaseOwner, code);
     } catch {
@@ -103,4 +106,12 @@ export async function runOneInternalDispatch(): Promise<InternalDispatchResult> 
     }
     throw new InternalDispatchError("workflow_start_failed");
   }
+}
+
+export async function renewWorkflowDispatchLease(dispatchId: string, leaseOwner: string) {
+  const { data, error } = await createServerSupabaseClient().rpc("renew_kyozai_workflow_dispatch_lease", {
+    p_dispatch_id: dispatchId,
+    p_lease_owner: leaseOwner,
+  });
+  if (error || data !== true) throw new InternalDispatchError("dispatch_complete_failed");
 }

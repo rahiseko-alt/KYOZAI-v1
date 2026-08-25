@@ -23,7 +23,6 @@ import type { ScriptStage, SlideMap } from "./content-pipeline";
 const ARTIFACT_BUCKET = "kyozai-artifacts";
 type StoredArtifact = { id: string; storagePath: string; sha256: string; bytes: Buffer };
 type StageRun = { id: string; attempt: number; leaseOwner: string };
-
 function artifactPath(jobId: string, revisionId: string, lifecycle: "draft" | "validated", id: string, name: string) {
   return `${jobId}/${revisionId}/${lifecycle}/${id}-${name}`;
 }
@@ -41,7 +40,6 @@ async function existingPassedArtifact(jobId: string, revisionId: string, stage: 
     .in("lifecycle", ["validated", "final"]).maybeSingle();
   return artifact ? artifactId : undefined;
 }
-
 async function readJsonArtifact<T>(artifactId: string): Promise<T> {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("artifacts").select("storage_bucket, storage_path").eq("id", artifactId).maybeSingle();
@@ -50,7 +48,6 @@ async function readJsonArtifact<T>(artifactId: string): Promise<T> {
   if (downloadError || !blob) throw new Error("workflow_artifact_download_failed");
   return JSON.parse(Buffer.from(await blob.arrayBuffer()).toString("utf8")) as T;
 }
-
 async function beginStage(jobId: string, revisionId: string, stage: KyozaiJobStage, slideNumber = 0): Promise<StageRun | undefined> {
   if (await existingPassedArtifact(jobId, revisionId, stage, slideNumber)) return undefined;
   const supabase = createServerSupabaseClient();
@@ -66,7 +63,6 @@ async function beginStage(jobId: string, revisionId: string, stage: KyozaiJobSta
   if (!claim?.[0]) return undefined;
   return { id: inserted.id, attempt: Number(inserted.attempt), leaseOwner };
 }
-
 async function withStage(jobId: string, revisionId: string, stage: KyozaiJobStage, slideNumber: number, work: (run: StageRun) => Promise<{ artifactIds: string[]; usage?: Record<string, unknown> }>): Promise<string[] | undefined> {
   const existing = await existingPassedArtifact(jobId, revisionId, stage, slideNumber);
   if (existing) return [existing];
@@ -100,7 +96,6 @@ async function withStage(jobId: string, revisionId: string, stage: KyozaiJobStag
     throw error;
   }
 }
-
 async function storeArtifact(jobId: string, revisionId: string, kind: KyozaiArtifactKind, name: string, bytes: Buffer, mediaType: string, slideNumber?: number): Promise<StoredArtifact> {
   const supabase = createServerSupabaseClient();
   const id = randomUUID();
@@ -110,10 +105,8 @@ async function storeArtifact(jobId: string, revisionId: string, kind: KyozaiArti
   // Storage is the delivery source of truth. Validate the object read back from
   // private storage before a database row can become validated/final.
   const { data: persisted, error: persistedError } = await supabase.storage.from(ARTIFACT_BUCKET).download(storagePath);
-  if (persistedError || !persisted) throw new Error("artifact_readback_failed");
-  const persistedBytes = Buffer.from(await persisted.arrayBuffer());
-  const checksum = createHash("sha256").update(bytes).digest("hex");
-  if (persistedBytes.length !== bytes.length || createHash("sha256").update(persistedBytes).digest("hex") !== checksum) {
+  if (persistedError || !persisted) throw new Error("artifact_readback_failed"); const persistedBytes = Buffer.from(await persisted.arrayBuffer());
+  const checksum = createHash("sha256").update(bytes).digest("hex"); if (persistedBytes.length !== bytes.length || createHash("sha256").update(persistedBytes).digest("hex") !== checksum) {
     throw new Error("artifact_readback_hash_mismatch");
   }
   const { error: insertError } = await supabase.from("artifacts").insert({ id, job_id: jobId, revision_id: revisionId, kind, lifecycle: "draft", storage_bucket: ARTIFACT_BUCKET, storage_path: storagePath, media_type: mediaType, byte_size: bytes.length, ...(slideNumber ? { slide_number: slideNumber } : {}) });
@@ -216,20 +209,30 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
       image = { ...(artifact.metadata as Omit<RenderedSlideImage, "data">), data: "", bytes: Buffer.from(await blob.arrayBuffer()), artifactId: artifact.id } as RenderedSlideImage & { bytes: Buffer; artifactId: string };
     } else {
       let created: (RenderedSlideImage & { bytes: Buffer; artifactId: string }) | undefined;
-      const outputIds = await withStage(jobId, revisionId, "image_generate", slide.number, async () => {
-        const budget = await createServerSupabaseClient().rpc("assert_kyozai_provider_budget", {
+      const outputIds = await withStage(jobId, revisionId, "image_generate", slide.number, async (run) => {
+        const requestFingerprint = `stage-run:${run.id}`;
+        const reserve = await createServerSupabaseClient().rpc("reserve_kyozai_image_call", {
           p_job_id: jobId,
-          p_image_model: modelId,
-          p_image_calls: 1,
+          p_revision_id: revisionId,
+          p_stage_run_id: run.id,
+          p_model: modelId,
+          p_request_fingerprint: requestFingerprint,
         });
-        if (budget.error || budget.data !== true) throw new Error("provider_budget_unavailable");
-        const rendered = process.env.KYOZAI_E2E_MODE === "1" ? await mockRenderedSlide(teachingPackage, slide, modelId) : await renderValidatedSlide(teachingPackage, slide, modelId, Date.now() + 14 * 60_000);
-        const bytes = Buffer.from(rendered.data, "base64");
-        const artifact = await storeArtifact(jobId, revisionId, "slide_image", `slide-${String(slide.number).padStart(2, "0")}.png`, bytes, "image/png", slide.number);
-        created = { ...rendered, bytes, artifactId: artifact.id };
-        const supabase = createServerSupabaseClient();
-        await supabase.from("artifacts").update({ metadata: { ...rendered, data: undefined } }).eq("id", artifact.id);
-        return { artifactIds: [artifact.id], usage: { provider: modelId, model: rendered.providerModel, requestFingerprint: rendered.promptHash, imageCount: 1, chargeState: "confirmed" } };
+        if (reserve.error || reserve.data !== true) throw new Error("provider_budget_unavailable");
+        try {
+          const rendered = process.env.KYOZAI_E2E_MODE === "1" ? await mockRenderedSlide(teachingPackage, slide, modelId) : await renderValidatedSlide(teachingPackage, slide, modelId, Date.now() + 14 * 60_000);
+          const bytes = Buffer.from(rendered.data, "base64");
+          const artifact = await storeArtifact(jobId, revisionId, "slide_image", `slide-${String(slide.number).padStart(2, "0")}.png`, bytes, "image/png", slide.number);
+          created = { ...rendered, bytes, artifactId: artifact.id };
+          const supabase = createServerSupabaseClient();
+          await supabase.from("artifacts").update({ metadata: { ...rendered, data: undefined } }).eq("id", artifact.id);
+          const settled = await supabase.rpc("settle_kyozai_image_call", { p_job_id: jobId, p_request_fingerprint: requestFingerprint, p_charge_state: "confirmed" });
+          if (settled.error || settled.data !== true) throw new Error("provider_usage_settlement_failed");
+          return { artifactIds: [artifact.id] };
+        } catch (error) {
+          await createServerSupabaseClient().rpc("settle_kyozai_image_call", { p_job_id: jobId, p_request_fingerprint: requestFingerprint, p_charge_state: "ambiguous" });
+          throw error;
+        }
       });
       if (created) {
         image = created;
@@ -250,7 +253,8 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
         throw new Error("image_generation_stage_busy");
       }
     }
-    await withStage(jobId, revisionId, "image_validate", slide.number, async () => ({ artifactIds: [image.artifactId], usage: { model: image.qaModel, requestFingerprint: image.imageHash } }));
+    const validation = await withStage(jobId, revisionId, "image_validate", slide.number, async () => ({ artifactIds: [image.artifactId], usage: { model: image.qaModel, requestFingerprint: image.imageHash } }));
+    if (!validation) throw new Error("image_validation_stage_busy");
     images.push(image);
   }
   return images;

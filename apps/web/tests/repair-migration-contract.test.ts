@@ -28,6 +28,7 @@ describe("破滅前提のDB修理契約", () => {
     expect(repairMigration).toContain("lease_owner = p_lease_owner");
     expect(repairMigration).toContain("workflow_run_id is null");
     expect(repairMigration).toContain("workflow_run_id = p_workflow_run_id");
+    expect(repairMigration).toContain("renew_kyozai_workflow_dispatch_lease");
   });
 
   it("Provider実行はDB予算とモデル設定を原子的に検査し、usageを冪等に記録する", () => {
@@ -35,7 +36,9 @@ describe("破滅前提のDB修理契約", () => {
     expect(repairMigration).toContain("for update;");
     expect(repairMigration).toContain("v_control.allowed_models ? p_image_model");
     expect(repairMigration).toContain("v_job.image_model <> p_image_model");
-    expect(repairMigration).toContain("confirmed_image_calls + p_image_calls > v_quota.reserved_image_calls");
+    expect(repairMigration).toContain("confirmed_image_calls + v_quota.inflight_image_calls + p_image_calls > v_quota.reserved_image_calls");
+    expect(repairMigration).toContain("reserve_kyozai_image_call");
+    expect(repairMigration).toContain("settle_kyozai_image_call");
     expect(repairMigration).toContain("create or replace function public.record_kyozai_usage");
     expect(repairMigration).toContain("where job_id = p_job_id and request_fingerprint = p_request_fingerprint");
     expect(repairMigration).toContain("create or replace function public.release_kyozai_unused_quota");
@@ -44,7 +47,10 @@ describe("破滅前提のDB修理契約", () => {
   it("worker専用の修理RPCをauthenticatedへ公開しない", () => {
     for (const name of [
       "record_kyozai_workflow_started",
+      "renew_kyozai_workflow_dispatch_lease",
       "assert_kyozai_provider_budget",
+      "reserve_kyozai_image_call",
+      "settle_kyozai_image_call",
       "record_kyozai_usage",
       "release_kyozai_unused_quota",
       "complete_kyozai_workflow_dispatch_v2",

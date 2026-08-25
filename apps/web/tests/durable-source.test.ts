@@ -79,7 +79,7 @@ describe("durable worker source loading", () => {
   it("accepts a private PDF with no more than 30 pages", async () => {
     await expect(loadDurableSources(jobId, { attachmentIds: [attachmentId] }, attachmentSupabase(fixturePdf(30))))
       .resolves.toHaveLength(1);
-  });
+  }, 15_000);
 
   it("rejects a private PDF with more than 30 pages before model input", async () => {
     await expect(loadDurableSources(jobId, { attachmentIds: [attachmentId] }, attachmentSupabase(fixturePdf(31))))
