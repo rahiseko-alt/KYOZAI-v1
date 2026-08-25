@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  artifactDownloadPath,
   fetchJobSnapshot,
   getJobIdFromSearch,
   isTerminalJobStatus,
@@ -60,8 +61,10 @@ export function JobWorkspace({ initialJobId, fetcher }: JobWorkspaceProps) {
       const snapshot = await fetchJobSnapshot(jobId, fetchRef.current);
       setJob(snapshot);
       setError(undefined);
+      return snapshot;
     } catch {
       setError("進捗を取得できませんでした。通信を確認して、もう一度お試しください。");
+      return undefined;
     }
   }, [jobId]);
 
@@ -70,9 +73,9 @@ export function JobWorkspace({ initialJobId, fetcher }: JobWorkspaceProps) {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      await refresh();
+      const snapshot = await refresh();
       if (!active) return;
-      const delay = pollDelayMs(job?.status ?? "queued");
+      const delay = pollDelayMs(snapshot?.status ?? "queued");
       if (delay) timer = setTimeout(poll, delay);
     };
     void poll();
@@ -80,7 +83,7 @@ export function JobWorkspace({ initialJobId, fetcher }: JobWorkspaceProps) {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [job?.status, jobId, refresh]);
+  }, [jobId, refresh]);
 
   if (!jobId) {
     return <section aria-live="polite"><p>表示する教材jobがありません。</p></section>;
@@ -100,8 +103,8 @@ export function JobWorkspace({ initialJobId, fetcher }: JobWorkspaceProps) {
           <h2>工程</h2>
           <ol>
             {job.stages.map((stage) => (
-              <li key={`${stage.name}-${stage.attempt}`} data-stage-status={stage.status}>
-                <strong>{stageLabel(stage.name)}</strong> — {stage.status}（試行 {stage.attempt}）
+              <li key={`${stage.stage}-${stage.slideNumber ?? "all"}-${stage.attempt}`} data-stage-status={stage.status}>
+                <strong>{stageLabel(stage.stage)}</strong> — {stage.status}（試行 {stage.attempt}）
                 {stage.errorCode ? <span> {stage.errorCode}</span> : null}
               </li>
             ))}
@@ -112,8 +115,9 @@ export function JobWorkspace({ initialJobId, fetcher }: JobWorkspaceProps) {
           {job.artifacts.length === 0 ? <p>検証済みの成果物はまだありません。</p> : (
             <ul>
               {job.artifacts.map((artifact) => (
-                <li key={artifact.id}>
-                  <strong>{artifactLabel(artifact)}</strong> — {artifact.lifecycle}、{artifact.mediaType}、{artifact.byteSize} bytes
+                <li key={artifact.artifactId}>
+                  <strong>{artifactLabel(artifact)}</strong> — {artifact.status}、{artifact.mediaType}、{artifact.byteSize} bytes
+                  {artifact.status === "final" ? <a href={artifactDownloadPath(jobId, artifact.artifactId)}>ダウンロード</a> : null}
                 </li>
               ))}
             </ul>

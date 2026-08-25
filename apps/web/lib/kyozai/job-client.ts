@@ -1,40 +1,18 @@
+import { isTerminalJobStatus as isTerminalContractJobStatus, type ArtifactManifestEntry, type KyozaiJob, type KyozaiJobStatus, type StageLedgerEntry } from "../../../../shared/kyozai-job-contract";
+
 export const JOB_QUERY_KEY = "job";
 
-export type KyozaiJobStatus = "queued" | "running" | "completed" | "failed" | "cancelling" | "cancelled" | "deleting" | "deleted";
-export type JobStageStatus = "pending" | "running" | "passed" | "failed" | "skipped";
-
-export type JobStage = {
-  name: string;
-  status: JobStageStatus;
-  attempt: number;
-  updatedAt?: string;
-  errorCode?: string;
-};
-
-export type JobArtifact = {
-  id: string;
-  kind: string;
-  lifecycle: "draft" | "validated" | "final" | "deleted";
-  mediaType: string;
-  byteSize: number;
-  sha256: string;
-  slideNumber?: number;
-};
-
-export type KyozaiJobSnapshot = {
-  id: string;
-  status: KyozaiJobStatus;
-  currentStage?: string;
+export type KyozaiJobSnapshot = Pick<KyozaiJob, "id" | "status" | "currentStage"> & {
   revision: number;
-  stages: JobStage[];
-  artifacts: JobArtifact[];
+  stages: StageLedgerEntry[];
+  artifacts: ArtifactManifestEntry[];
   warning?: string;
   errorCode?: string;
 };
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export type { KyozaiJobStatus } from "../../../../shared/kyozai-job-contract";
 
-const terminalStatuses: ReadonlySet<KyozaiJobStatus> = new Set(["completed", "failed", "cancelled", "deleted"]);
 const jobIdPattern = /^[A-Za-z0-9_-]{1,128}$/;
 
 export function getJobIdFromSearch(search: string): string | undefined {
@@ -49,7 +27,7 @@ export function writeJobIdToUrl(jobId: string, location: Location, history: Hist
 }
 
 export function isTerminalJobStatus(status: KyozaiJobStatus): boolean {
-  return terminalStatuses.has(status);
+  return isTerminalContractJobStatus(status);
 }
 
 export function pollDelayMs(status: KyozaiJobStatus): number | undefined {
@@ -65,4 +43,8 @@ export async function fetchJobSnapshot(jobId: string, fetcher: FetchLike = fetch
   });
   if (!response.ok) throw new Error(`job_request_failed:${response.status}`);
   return await response.json() as KyozaiJobSnapshot;
+}
+
+export function artifactDownloadPath(jobId: string, artifactId: string): string {
+  return `/api/jobs/${encodeURIComponent(jobId)}/artifacts/${encodeURIComponent(artifactId)}`;
 }

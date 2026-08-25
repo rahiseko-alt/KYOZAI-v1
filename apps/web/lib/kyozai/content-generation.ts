@@ -14,6 +14,8 @@ import { requestStructured } from "./openai";
 import type { SourceInput } from "./types";
 
 type RepairedContent = { map: SlideMap; scripts: ScriptStage };
+export type ContentGenerationStage = "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design";
+export type ContentGenerationObserver = (stage: ContentGenerationStage, output: unknown) => Promise<void>;
 
 const groundingRules = [
   "入力資料だけを根拠に日本語で処理してください。根拠のない数値・制度・事例を補わないでください。",
@@ -112,7 +114,7 @@ async function repairContentAfterFreezeReview(
   return repaired;
 }
 
-export async function generatePackage(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY) {
+export async function generatePackage(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY, observe?: ContentGenerationObserver) {
   const sourceInput = [{ role: "user", content: [...untrustedSources(sources), { type: "input_text" as const, text: `教材への要望:\n${request}` }] }];
   const analysis = await requestStructured(
     sourceInput,
@@ -125,6 +127,7 @@ export async function generatePackage(sources: SourceInput[], request: string, d
     isTeachingAnalysis,
   );
   if (!isTeachingAnalysis(analysis)) throw new Error("教材分析を検証できませんでした。");
+  await observe?.("analysis", analysis);
 
   const generatedMap = await requestStructured(
     [{ role: "user", content: [...untrustedSources(sources), { type: "input_text", text: `教材への要望:\n${request}\n\n確定済み教材分析:\n${JSON.stringify(analysis)}` }] }],
@@ -145,6 +148,7 @@ export async function generatePackage(sources: SourceInput[], request: string, d
   );
   if (!isSlideMap(generatedMap)) throw new Error("スライドマップを検証できませんでした。");
   let map: SlideMap = generatedMap;
+  await observe?.("slide_map", map);
 
   const generatedScripts = await requestStructured(
     [{ role: "user", content: [...untrustedSources(sources), { type: "input_text", text: `教材への要望:\n${request}\n\n教材分析:\n${JSON.stringify(analysis)}\n\n凍結前スライドマップ:\n${JSON.stringify(map)}` }] }],
@@ -163,6 +167,7 @@ export async function generatePackage(sources: SourceInput[], request: string, d
   );
   if (!isScriptStage(generatedScripts)) throw new Error("講師台本を検証できませんでした。");
   let scripts: ScriptStage = generatedScripts;
+  await observe?.("script_timing", scripts);
 
   let freeze = await reviewContentFreeze(sources, request, analysis, map, scripts, deadlineMs);
   if (!freeze.passed || freeze.issues.length) {
@@ -171,5 +176,8 @@ export async function generatePackage(sources: SourceInput[], request: string, d
     scripts = repaired.scripts;
     freeze = await reviewContentFreeze(sources, request, analysis, map, scripts, deadlineMs);
   }
-  return buildTeachingPackage(sources, analysis, map, scripts, freeze, process.env.OPENAI_MODEL || "gpt-5.5");
+  await observe?.("content_freeze", freeze);
+  const teachingPackage = buildTeachingPackage(sources, analysis, map, scripts, freeze, process.env.OPENAI_MODEL || "gpt-5.5");
+  await observe?.("design", { designProfile: teachingPackage.designProfile, slides: teachingPackage.slides.map(({ number, layoutFamily, labels, composition }) => ({ number, layoutFamily, labels, composition })) });
+  return teachingPackage;
 }
