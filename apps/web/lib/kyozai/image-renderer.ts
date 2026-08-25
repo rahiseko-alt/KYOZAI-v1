@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import sharp from "sharp";
 
+import { PublicHttpError } from "./http-errors";
+
 import { buildSlideImagePrompt } from "./image-prompt";
 import { IMAGE_MODELS, type ImageModelId } from "./image-models";
 import type { RenderedSlideImage } from "./image-types";
@@ -48,14 +50,14 @@ async function providerFetch(url: string, init: RequestInit, operation: string, 
       await wait(delayMs);
       const retry = await fetch(url, { ...init, signal: AbortSignal.timeout(Math.max(5_000, timeoutMs - delayMs - 1_000)) });
       if (retry.ok) return retry;
-      if (retry.status === 429) throw new Error(`${operation}の利用上限または混雑に当たっています。少し時間を置いてから再実行してください。`);
-      throw new Error(`${operation}が応答を完了できませんでした (${retry.status})。`);
+      if (retry.status === 429) throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", `${operation}が混雑しています。少し時間を置いてから再実行してください。`, 60);
+      throw new PublicHttpError(502, "UPSTREAM_FAILURE", `${operation}が応答を完了できませんでした。`);
     }
-    if (!response.ok) throw new Error(`${operation}が応答を完了できませんでした (${response.status})。`);
+    if (!response.ok) throw new PublicHttpError(response.status === 429 ? 503 : 502, response.status === 429 ? "SERVICE_UNAVAILABLE" : "UPSTREAM_FAILURE", response.status === 429 ? `${operation}が混雑しています。少し時間を置いてから再実行してください。` : `${operation}が応答を完了できませんでした。`, response.status === 429 ? 60 : undefined);
     return response;
   } catch (error) {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError" || error.name === "TypeError")) {
-      throw new Error(`${operation}の結果を確認できませんでした。二重生成を避けるため自動再送はしていません。`);
+      throw new PublicHttpError(504, "TIMEOUT", `${operation}の結果を確認できませんでした。二重生成を避けるため自動再送はしていません。`);
     }
     throw error;
   }
@@ -89,7 +91,7 @@ function geminiImageBlocks(payload: unknown) {
 
 async function generateGemini(modelId: Extract<ImageModelId, `gemini-${string}`>, prompt: string, timeoutMs: number) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Gemini画像生成の接続が未設定です。管理者へお問い合わせください。");
+  if (!apiKey) throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "Gemini画像生成の接続が未設定です。管理者へお問い合わせください。");
   const response = await providerFetch(GEMINI_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
@@ -110,7 +112,7 @@ async function generateGemini(modelId: Extract<ImageModelId, `gemini-${string}`>
 
 async function generateOpenAi(prompt: string, timeoutMs: number) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OpenAI画像生成の接続が未設定です。管理者へお問い合わせください。");
+  if (!apiKey) throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "OpenAI画像生成の接続が未設定です。管理者へお問い合わせください。");
   const response = await providerFetch(OPENAI_IMAGE_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -171,7 +173,7 @@ function outputText(payload: unknown) {
 
 async function visualReview(image: Buffer, slide: Slide, timeoutMs: number): Promise<VisualReview> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("画像QAの接続が未設定です。管理者へお問い合わせください。");
+  if (!apiKey) throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "画像QAの接続が未設定です。管理者へお問い合わせください。");
   const response = await providerFetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

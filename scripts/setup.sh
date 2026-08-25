@@ -2,8 +2,8 @@
 #
 # 新案件セットアップ（cc-v2 をコピーした新リポジトリで「1回だけ」実行する）。
 #
-# 目的：branch protection を掛け、「CI が緑でなければマージできない」状態にする。
-#   ＝ AGENTS.md のルール文に“歯”を付け、cc-v2 と同レベルの機械強制で運用する。
+# 目的：branch protection を掛け、CI・人間レビュー・会話解決を通過しなければ
+# main へマージできない状態にする。
 #   これ（サーバー側設定）はクローンで運ばれないため、新リポジトリごとに一度だけ要る。
 #
 # 前提：gh CLI（https://cli.github.com）がインストール済み・認証済み（`gh auth login`）。
@@ -16,14 +16,7 @@
 # 必須チェック（context 名）：
 #   - ci-green … ci.yml の集約ゲート（quality/smoke が全て緑のときだけ success）
 #
-# ⚠ 既知の制約：このスクリプトは classic Branch Protection API を使うため、
-#   「Require a pull request before merging（0 approvals）」は設定できない
-#   （classic API は required_approving_review_count に 0 を受け付けない）。
-#   このスクリプトだけを実行した状態では main への直 push が可能なまま＝
-#   ci-green を丸ごと迂回できてしまう。実地で確認済み。
-#   PR必須化は setup skill 手順7の Rulesets を手動で使うこと
-#   （Require a pull request before merging にチェック、Required approvals は 0）。
-#   ※ ci-green は ci.yml の集約ゲートの job id と一致させてある（'name:' は付けない）。
+# ci-green は ci.yml の集約ゲートの job id と一致させてある（'name:' は付けない）。
 #     ここを変えたら両方直すこと。
 
 set -euo pipefail
@@ -65,7 +58,7 @@ if [ -z "$default_branch" ]; then
 fi
 [ -n "$default_branch" ] || default_branch="main"
 
-# 4) API ペイロード（守るのは "CI が緑" だけ＝レビュー必須にはしない）
+# 4) API ペイロード（CI、人間レビュー、解決済み会話を必須化）
 checks_json=""
 for c in "${REQUIRED_CHECKS[@]}"; do
   checks_json="${checks_json}{\"context\":\"${c}\"},"
@@ -75,10 +68,15 @@ checks_json="[${checks_json%,}]"
 payload="$(cat <<JSON
 {
   "required_status_checks": { "strict": true, "checks": ${checks_json} },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false,
+    "required_approving_review_count": 1,
+    "require_last_push_approval": true
+  },
   "restrictions": null,
-  "required_conversation_resolution": false,
+  "required_conversation_resolution": true,
   "allow_force_pushes": false,
   "allow_deletions": false
 }
@@ -115,5 +113,5 @@ printf '%s' "$payload" | gh api -X PUT \
   --input - >/dev/null
 
 echo "✓ branch protection を適用しました: ${owner}/${repo}@${default_branch}"
-echo "  必須チェック ${REQUIRED_CHECKS[*]} が緑でなければマージ不可になりました。"
-echo "  これで cc-v2 と同レベルの機械強制で運用されます。"
+echo "  必須チェック ${REQUIRED_CHECKS[*]}、最新差分への承認1名、会話解決が必須です。"
+echo "  管理者にも同じ保護規則が適用されます。"

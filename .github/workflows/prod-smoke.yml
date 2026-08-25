@@ -1,0 +1,71 @@
+name: prod-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-smoke-main
+  cancel-in-progress: true
+
+env:
+  PROD_URL: https://kyozai-v1.vercel.app
+  MARKER: "資料を入れたら、教材準備は終わり。"
+
+jobs:
+  production-lockdown:
+    name: portfolio 200 + generation locked
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the production deployment of this commit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 18); do
+            body=$(curl -fsS --max-time 30 "${PROD_URL}/api/health" || true)
+            actual=$(printf '%s' "${body}" | jq -r '.commitSha // empty' 2>/dev/null || true)
+            if [ "${actual}" = "${EXPECTED_SHA}" ]; then
+              echo "Production is serving ${EXPECTED_SHA}"
+              exit 0
+            fi
+            echo "Attempt ${attempt}: production commit is ${actual:-unavailable}; waiting for ${EXPECTED_SHA}"
+            sleep 10
+          done
+          echo "FAIL: production did not deploy ${EXPECTED_SHA} within 3 minutes"
+          exit 1
+
+      - name: Check portfolio page and HSTS
+        run: |
+          code=$(curl -sS -D headers.txt -o body.html -w '%{http_code}' --max-time 30 "${PROD_URL}")
+          test "${code}" = "200"
+          grep -qF -- "${MARKER}" body.html
+          grep -qF -- "生成機能は現在、一般公開していません" body.html
+          grep -iq '^strict-transport-security:' headers.txt
+
+      - name: Check health metadata
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          body=$(curl -fsS --max-time 30 "${PROD_URL}/api/health")
+          test "$(printf '%s' "${body}" | jq -r .status)" = "ok"
+          test "$(printf '%s' "${body}" | jq -r .environment)" = "production"
+          test "$(printf '%s' "${body}" | jq -r .commitSha)" = "${EXPECTED_SHA}"
+
+      - name: Check generation APIs are unavailable in production
+        run: |
+          check_locked() {
+            path="$1"
+            content_type="$2"
+            payload="$3"
+            code=$(curl -sS -o response.json -w '%{http_code}' --max-time 30 \
+              -X POST -H "Content-Type: ${content_type}" --data-binary "${payload}" "${PROD_URL}${path}")
+            echo "${path}: HTTP ${code}"
+            test "${code}" = "404"
+          }
+          check_locked /api/generate multipart/form-data ""
+          check_locked /api/revise application/json '{}'
+          check_locked /api/render-slide application/json '{}'
