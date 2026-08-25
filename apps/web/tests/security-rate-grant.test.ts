@@ -92,6 +92,25 @@ describe("分散レート制限", () => {
     await expect(enforceRateLimit(productionRequest(), "generate")).rejects.toMatchObject({ status: 503 });
   });
 
+  it("Redisが壊れたカウンタまたはTTLを返したら、課金経路を503で停止する", async () => {
+    productionEnv();
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: ["not-a-number", 1, 900_000, 86_400_000],
+    }), { status: 200 })));
+    await expect(enforceRateLimit(productionRequest(), "generate")).rejects.toMatchObject({
+      status: 503,
+      code: "SERVICE_UNAVAILABLE",
+    });
+
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      result: [1, 1, -1, 86_400_000],
+    }), { status: 200 })));
+    await expect(enforceRateLimit(productionRequest(), "generate")).rejects.toMatchObject({
+      status: 503,
+      code: "SERVICE_UNAVAILABLE",
+    });
+  });
+
   it("render-slideはgrantとslideの再試行枠も同じ原子操作に含める", async () => {
     productionEnv();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ result: [1, 1, 1, 900_000, 86_400_000, 900_000] }), { status: 200 }));

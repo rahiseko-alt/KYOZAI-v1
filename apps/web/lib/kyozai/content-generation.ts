@@ -11,9 +11,20 @@ import {
 } from "./content-schemas";
 import { designInstructions } from "./design";
 import { requestStructured } from "./openai";
-import type { SourceInput } from "./types";
+import type { SourceInput, TeachingAnalysis, TeachingPackage } from "./types";
 
 type RepairedContent = { map: SlideMap; scripts: ScriptStage };
+/**
+ * The durable worker persists this value as the content-freeze artifact.  The
+ * review is retained even when it initially failed, while a successful repair
+ * carries the exact map and scripts that design must consume.
+ */
+export type ContentFreezeGate = {
+  review: ContentFreezeReview;
+  map: SlideMap;
+  scripts: ScriptStage;
+  repaired: boolean;
+};
 export type ContentGenerationStage = "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design";
 export type ContentGenerationObserver = (stage: ContentGenerationStage, output: unknown) => Promise<void>;
 
@@ -51,6 +62,48 @@ const contentFreezeInstructions = [
 
 function isRepairedContent(value: unknown): value is RepairedContent {
   return Boolean(value && typeof value === "object" && isSlideMap((value as RepairedContent).map) && isScriptStage((value as RepairedContent).scripts));
+}
+
+export async function generateTeachingAnalysis(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY): Promise<TeachingAnalysis> {
+  const sourceInput = [{ role: "user" as const, content: [...untrustedSources(sources), { type: "input_text" as const, text: `教材への要望:\n${request}` }] }];
+  const analysis = await requestStructured(
+    sourceInput,
+    `${groundingRules}\n対象者、受講前の課題、観察可能な到達点、中核主張、根拠、具体例、受講後の1アクションを抽出してください。要約やスライド作成へ進まず、教材分析だけを返します。`,
+    "teaching_analysis", teachingAnalysisSchema, 2400, 2, deadlineMs, isTeachingAnalysis,
+  );
+  if (!isTeachingAnalysis(analysis)) throw new Error("教材分析を検証できませんでした。");
+  return analysis;
+}
+
+export async function generateSlideMap(sources: SourceInput[], request: string, analysis: TeachingAnalysis, deadlineMs = Number.POSITIVE_INFINITY): Promise<SlideMap> {
+  const generatedMap = await requestStructured(
+    [{ role: "user", content: [...untrustedSources(sources), { type: "input_text", text: `教材への要望:\n${request}\n\n確定済み教材分析:\n${JSON.stringify(analysis)}` }] }],
+    [
+      groundingRules,
+      "文字起こし順をそのまま使わず、自分ごと化、全体像、理解、体験、行動の学習順へ再構成してください。",
+      "1スライド1テーマとし、タイトル列だけで講義の論理が通るようにします。先頭はcover、末尾は具体的行動のactionです。",
+      "表示文言と内容固有の具体構図を確定します。compositionには図の要素数、位置、関係を明記し、layoutFamily名の言い換えだけにしません。",
+      designInstructions(), "この工程では講師台本、FAQ、確認テストを書きません。",
+    ].join("\n"),
+    "slide_map", slideMapSchema, 7000, 2, deadlineMs, isSlideMap,
+  );
+  if (!isSlideMap(generatedMap)) throw new Error("スライドマップを検証できませんでした。");
+  return generatedMap;
+}
+
+export async function generateScriptTiming(sources: SourceInput[], request: string, analysis: TeachingAnalysis, map: SlideMap, deadlineMs = Number.POSITIVE_INFINITY): Promise<ScriptStage> {
+  const generatedScripts = await requestStructured(
+    [{ role: "user", content: [...untrustedSources(sources), { type: "input_text", text: `教材への要望:\n${request}\n\n教材分析:\n${JSON.stringify(analysis)}\n\n凍結前スライドマップ:\n${JSON.stringify(map)}` }] }],
+    [
+      groundingRules,
+      "スライドマップのnumber、タイトル、表示文言、layoutFamily、compositionを変更せず、各スライドの完成講師台本を書いてください。",
+      "講師台本は表示文言の読み上げではなく、理由、例、前後のつなぎを含む自然な話し言葉にします。別テーマへ脱線しません。",
+      "scenario、FAQ、確認テストは同じ原典とスライドマップから作ります。answerIndexはoptionsの0始まりです。時間や文字数は申告せず、APPが決定論的に計算します。",
+    ].join("\n"),
+    "speaker_script_and_extras", scriptStageSchema, 9000, 2, deadlineMs, isScriptStage,
+  );
+  if (!isScriptStage(generatedScripts)) throw new Error("講師台本を検証できませんでした。");
+  return generatedScripts;
 }
 
 async function reviewContentFreeze(
@@ -114,73 +167,40 @@ async function repairContentAfterFreezeReview(
   return repaired;
 }
 
-export async function generatePackage(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY, observe?: ContentGenerationObserver) {
-  const sourceInput = [{ role: "user", content: [...untrustedSources(sources), { type: "input_text" as const, text: `教材への要望:\n${request}` }] }];
-  const analysis = await requestStructured(
-    sourceInput,
-    `${groundingRules}\n対象者、受講前の課題、観察可能な到達点、中核主張、根拠、具体例、受講後の1アクションを抽出してください。要約やスライド作成へ進まず、教材分析だけを返します。`,
-    "teaching_analysis",
-    teachingAnalysisSchema,
-    2400,
-    2,
-    deadlineMs,
-    isTeachingAnalysis,
-  );
-  if (!isTeachingAnalysis(analysis)) throw new Error("教材分析を検証できませんでした。");
-  await observe?.("analysis", analysis);
-
-  const generatedMap = await requestStructured(
-    [{ role: "user", content: [...untrustedSources(sources), { type: "input_text", text: `教材への要望:\n${request}\n\n確定済み教材分析:\n${JSON.stringify(analysis)}` }] }],
-    [
-      groundingRules,
-      "文字起こし順をそのまま使わず、自分ごと化、全体像、理解、体験、行動の学習順へ再構成してください。",
-      "1スライド1テーマとし、タイトル列だけで講義の論理が通るようにします。先頭はcover、末尾は具体的行動のactionです。",
-      "表示文言と内容固有の具体構図を確定します。compositionには図の要素数、位置、関係を明記し、layoutFamily名の言い換えだけにしません。",
-      designInstructions(),
-      "この工程では講師台本、FAQ、確認テストを書きません。",
-    ].join("\n"),
-    "slide_map",
-    slideMapSchema,
-    7000,
-    2,
-    deadlineMs,
-    isSlideMap,
-  );
-  if (!isSlideMap(generatedMap)) throw new Error("スライドマップを検証できませんでした。");
-  let map: SlideMap = generatedMap;
-  await observe?.("slide_map", map);
-
-  const generatedScripts = await requestStructured(
-    [{ role: "user", content: [...untrustedSources(sources), { type: "input_text", text: `教材への要望:\n${request}\n\n教材分析:\n${JSON.stringify(analysis)}\n\n凍結前スライドマップ:\n${JSON.stringify(map)}` }] }],
-    [
-      groundingRules,
-      "スライドマップのnumber、タイトル、表示文言、layoutFamily、compositionを変更せず、各スライドの完成講師台本を書いてください。",
-      "講師台本は表示文言の読み上げではなく、理由、例、前後のつなぎを含む自然な話し言葉にします。別テーマへ脱線しません。",
-      "scenario、FAQ、確認テストは同じ原典とスライドマップから作ります。answerIndexはoptionsの0始まりです。時間や文字数は申告せず、APPが決定論的に計算します。",
-    ].join("\n"),
-    "speaker_script_and_extras",
-    scriptStageSchema,
-    9000,
-    2,
-    deadlineMs,
-    isScriptStage,
-  );
-  if (!isScriptStage(generatedScripts)) throw new Error("講師台本を検証できませんでした。");
-  let scripts: ScriptStage = generatedScripts;
-  await observe?.("script_timing", scripts);
-
+export async function runContentFreezeGate(sources: SourceInput[], request: string, analysis: TeachingAnalysis, initialMap: SlideMap, initialScripts: ScriptStage, deadlineMs = Number.POSITIVE_INFINITY): Promise<ContentFreezeGate> {
+  let map = initialMap;
+  let scripts = initialScripts;
   let freeze = await reviewContentFreeze(sources, request, analysis, map, scripts, deadlineMs);
+  let repaired = false;
   if (!freeze.passed || freeze.issues.length) {
-    const repaired = await repairContentAfterFreezeReview(sources, request, analysis, map, scripts, freeze, deadlineMs);
-    map = repaired.map;
-    scripts = repaired.scripts;
+    const repairedContent = await repairContentAfterFreezeReview(sources, request, analysis, map, scripts, freeze, deadlineMs);
+    map = repairedContent.map;
+    scripts = repairedContent.scripts;
     freeze = await reviewContentFreeze(sources, request, analysis, map, scripts, deadlineMs);
+    repaired = true;
   }
-  await observe?.("content_freeze", freeze);
-  if (!freeze.passed || freeze.issues.length > 0) {
+  return { review: freeze, map, scripts, repaired };
+}
+
+export function buildDesignedPackage(sources: SourceInput[], analysis: TeachingAnalysis, map: SlideMap, scripts: ScriptStage, freeze: ContentFreezeReview): TeachingPackage {
+  return buildTeachingPackage(sources, analysis, map, scripts, freeze, process.env.OPENAI_MODEL || "gpt-5.5");
+}
+
+export async function generatePackage(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY, observe?: ContentGenerationObserver) {
+  const analysis = await generateTeachingAnalysis(sources, request, deadlineMs);
+  await observe?.("analysis", analysis);
+  let map = await generateSlideMap(sources, request, analysis, deadlineMs);
+  await observe?.("slide_map", map);
+  let scripts = await generateScriptTiming(sources, request, analysis, map, deadlineMs);
+  await observe?.("script_timing", scripts);
+  const gate = await runContentFreezeGate(sources, request, analysis, map, scripts, deadlineMs);
+  map = gate.map;
+  scripts = gate.scripts;
+  await observe?.("content_freeze", gate.review);
+  if (!gate.review.passed || gate.review.issues.length > 0) {
     throw new Error("内容凍結QAに合格しなかったため、画像生成を開始しません。");
   }
-  const teachingPackage = buildTeachingPackage(sources, analysis, map, scripts, freeze, process.env.OPENAI_MODEL || "gpt-5.5");
+  const teachingPackage = buildDesignedPackage(sources, analysis, map, scripts, gate.review);
   await observe?.("design", { designProfile: teachingPackage.designProfile, slides: teachingPackage.slides.map(({ number, layoutFamily, labels, composition }) => ({ number, layoutFamily, labels, composition })) });
   return teachingPackage;
 }

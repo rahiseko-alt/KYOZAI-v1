@@ -2,12 +2,14 @@ import { readBoundedText } from "../../../lib/kyozai/bounded-body";
 import { publicErrorResponse, badRequest } from "../../../lib/kyozai/http-errors";
 import { requireAsyncJobsEnabled, requireJobUser } from "../../../lib/kyozai/job-auth";
 import { createUpload } from "../../../lib/kyozai/job-store";
+import { enforceRateLimit } from "../../../lib/kyozai/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
     requireAsyncJobsEnabled();
+    await enforceRateLimit(request, "generate");
     const user = await requireJobUser(request);
     const raw = await readBoundedText(request, 8 * 1024, "アップロード要求が上限を超えています。");
     let body: { filename?: unknown; mediaType?: unknown; byteSize?: unknown };

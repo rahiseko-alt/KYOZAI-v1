@@ -128,7 +128,11 @@ async function consumeRedis(values: Bucket[]) {
   if (!payload || !Array.isArray(payload.result) || payload.result.length !== values.length * 2) throw unavailable();
   const counts = payload.result.slice(0, values.length).map(Number);
   const ttls = payload.result.slice(values.length).map(Number);
-  if (counts.some((count) => !Number.isFinite(count)) || ttls.some((ttl) => !Number.isFinite(ttl))) throw unavailable();
+  // PTTL=-1/-2 means a missing or non-expiring key. Neither is a valid result
+  // for a bucket this request just incremented, so accepting it would turn a
+  // limiter outage into an unbounded paid-provider path.
+  if (counts.some((count) => !Number.isInteger(count) || count < 1)
+    || ttls.some((ttl, index) => !Number.isInteger(ttl) || ttl <= 0 || ttl > values[index]!.windowMs)) throw unavailable();
   let retryAfterMs = 0;
   values.forEach((bucket, index) => {
     if ((counts[index] ?? 0) > bucket.limit) retryAfterMs = Math.max(retryAfterMs, ttls[index] ?? bucket.windowMs);

@@ -1,15 +1,15 @@
 import { isAuthorizedCronRequest, isInternalDispatchAvailable, runOneInternalDispatch } from "../../../../../lib/kyozai/internal-dispatch";
-import { isPublicProduction } from "../../../../../lib/kyozai/generation-access";
-import { publicErrorResponse, routeUnavailable, unauthorized } from "../../../../../lib/kyozai/http-errors";
+import { publicErrorResponse, routeUnavailable } from "../../../../../lib/kyozai/http-errors";
 
 export const runtime = "nodejs";
 
-/** Vercel Cron entrypoint. It is intentionally never available on public Production. */
+/** Vercel Cron entrypoint. It is an authenticated operational endpoint, never a public API. */
 async function dispatch(request: Request) {
   try {
-    if (isPublicProduction()) throw routeUnavailable();
     if (!isInternalDispatchAvailable()) throw routeUnavailable();
-    if (!isAuthorizedCronRequest(request)) throw unauthorized("内部処理の認証に失敗しました。");
+    // Return the same response for a missing secret and a bad credential so the
+    // operational route cannot be enumerated from the public internet.
+    if (!isAuthorizedCronRequest(request)) throw routeUnavailable();
     return Response.json(await runOneInternalDispatch(), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return publicErrorResponse(error, "内部jobの起動に失敗しました。");

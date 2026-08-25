@@ -127,6 +127,23 @@ describe("URL本文の実受信量制限", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("本文ストリームが途中で壊れても、接続を閉じて本文を成果物に渡さない", async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("途中までの本文"));
+        controller.error(new Error("upstream stream failed"));
+      },
+    });
+    const response = htmlResponse(body);
+
+    await expect(readUrl("https://example.com/", deadline(), {
+      resolve: vi.fn().mockResolvedValue([PUBLIC_V4]),
+      request: vi.fn().mockResolvedValue({ response, close }),
+    })).rejects.toThrow("upstream stream failed");
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("自己申告content-lengthが上限超過なら本文を読まずに拒否する", async () => {
     const response = htmlResponse("小さい本文", { headers: { "content-type": "text/html", "content-length": "1500001" } });
     await expect(readUrl("https://example.com/", deadline(), {

@@ -26,4 +26,16 @@ describe("永続workerの納品パッケージ", () => {
     const image = { ...rendered, bytes: Buffer.from(rendered.data, "base64"), imageHash: "0".repeat(64) };
     await expect(createDurablePackage({ ...packageCopy, slides: [packageCopy.slides[0]!] }, [image], Buffer.from("png"))).rejects.toThrow("package_image_integrity_failed");
   });
+
+  it("同じスライド番号を二重に受け取った壊れたworker出力は、ZIP化せず停止する", async () => {
+    const packageCopy = structuredClone(mockPackage);
+    const firstSlide = packageCopy.slides[0]!;
+    const rendered = await mockRenderedSlide(packageCopy, firstSlide, "gemini-3.1-flash-lite-image");
+    const duplicate = { ...rendered, bytes: Buffer.from(rendered.data, "base64") };
+    await expect(createDurablePackage(
+      { ...packageCopy, slides: [firstSlide, packageCopy.slides[1]!] },
+      [duplicate, duplicate],
+      Buffer.from("png"),
+    )).rejects.toThrow("package_image_integrity_failed");
+  });
 });
