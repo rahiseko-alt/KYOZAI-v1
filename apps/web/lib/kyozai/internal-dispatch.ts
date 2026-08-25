@@ -2,7 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 import { createServerSupabaseClient } from "../supabase/server";
 import { isPublicProduction } from "./generation-access";
-import { runKyozaiJobWorkflow } from "./job-workflow";
+import { start } from "workflow/api";
+import { durableKyozaiJobWorkflow } from "../../workflows/kyozai-job-workflow";
 
 export type ClaimedWorkflowDispatch = {
   id: string;
@@ -13,10 +14,10 @@ export type ClaimedWorkflowDispatch = {
 
 export type InternalDispatchResult =
   | { claimed: false }
-  | { claimed: true; dispatchId: string; jobId: string; attempts: number };
+  | { claimed: true; dispatchId: string; jobId: string; attempts: number; workflowRunId: string };
 
 export class InternalDispatchError extends Error {
-  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "dispatch_requeue_failed") {
+  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "dispatch_complete_failed" | "dispatch_requeue_failed") {
     super(code);
   }
 }
@@ -66,16 +67,24 @@ export async function requeueWorkflowDispatch(dispatchId: string, errorCode: str
   if (error) throw new InternalDispatchError("dispatch_requeue_failed");
 }
 
-export async function startClaimedWorkflow(dispatch: ClaimedWorkflowDispatch): Promise<void> {
-  await runKyozaiJobWorkflow(dispatch.jobId, dispatch.revisionId);
+export async function completeWorkflowDispatch(dispatchId: string) {
+  const { data, error } = await createServerSupabaseClient().rpc("complete_kyozai_workflow_dispatch", {
+    p_dispatch_id: dispatchId,
+  });
+  if (error || data !== true) throw new InternalDispatchError("dispatch_complete_failed");
+}
+
+export async function startClaimedWorkflow(dispatch: ClaimedWorkflowDispatch): Promise<string> {
+  const run = await start(durableKyozaiJobWorkflow, [{ dispatchId: dispatch.id, jobId: dispatch.jobId, revisionId: dispatch.revisionId }]);
+  return run.runId;
 }
 
 export async function runOneInternalDispatch(): Promise<InternalDispatchResult> {
   const dispatch = await claimOneWorkflowDispatch();
   if (!dispatch) return { claimed: false };
   try {
-    await startClaimedWorkflow(dispatch);
-    return { claimed: true, dispatchId: dispatch.id, jobId: dispatch.jobId, attempts: dispatch.attempts };
+    const workflowRunId = await startClaimedWorkflow(dispatch);
+    return { claimed: true, dispatchId: dispatch.id, jobId: dispatch.jobId, attempts: dispatch.attempts, workflowRunId };
   } catch (error) {
     const code = error instanceof InternalDispatchError ? error.code : "workflow_start_failed";
     try {

@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { readUrl } from "./source";
+import { assertSafePdf, pdfLimits } from "./pdf-safety";
 import type { SourceInput } from "./types";
 
 const SOURCE_BUCKET = "kyozai-sources";
 const MAX_SOURCE_TEXT_CHARS = 80_000;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const acceptedAttachmentMediaTypes = new Set(["application/pdf", "text/plain", "text/markdown"]);
 
 type DurableRequest = {
   sourceText?: unknown;
@@ -63,11 +65,13 @@ export async function loadDurableSources(
     for (const id of ids) {
       const row = rows.find((candidate) => candidate.id === id);
       if (!row || row.consumed_by_job_id !== jobId) throw new Error("durable_attachment_not_owned_by_job");
+      if (!acceptedAttachmentMediaTypes.has(row.media_type)) throw new Error("durable_attachment_media_type_invalid");
       const { data: blob, error: downloadError } = await supabase.storage.from(SOURCE_BUCKET).download(row.storage_path);
       if (downloadError || !blob) throw new Error("durable_attachment_download_failed");
       const bytes = Buffer.from(await blob.arrayBuffer());
+      if (bytes.length > pdfLimits.maxBytes) throw new Error("durable_attachment_too_large");
       if (row.media_type === "application/pdf") {
-        if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("durable_attachment_pdf_invalid");
+        await assertSafePdf(bytes);
         sources.push({ type: "input_file", filename: attachmentName(row), file_data: `data:application/pdf;base64,${bytes.toString("base64")}` });
       } else {
         const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
