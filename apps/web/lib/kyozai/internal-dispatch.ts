@@ -17,7 +17,7 @@ export type InternalDispatchResult =
   | { claimed: true; dispatchId: string; jobId: string; attempts: number; workflowRunId: string };
 
 export class InternalDispatchError extends Error {
-  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "workflow_start_uncertain" | "dispatch_complete_failed" | "dispatch_requeue_failed") {
+  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "workflow_start_uncertain" | "dispatch_complete_failed" | "dispatch_lease_lost" | "dispatch_requeue_failed") {
     super(code);
   }
 }
@@ -113,5 +113,5 @@ export async function renewWorkflowDispatchLease(dispatchId: string, leaseOwner:
     p_dispatch_id: dispatchId,
     p_lease_owner: leaseOwner,
   });
-  if (error || data !== true) throw new InternalDispatchError("dispatch_complete_failed");
+  if (error || data !== true) throw new InternalDispatchError("dispatch_lease_lost");
 }

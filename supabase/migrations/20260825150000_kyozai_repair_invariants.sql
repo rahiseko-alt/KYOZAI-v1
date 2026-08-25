@@ -99,9 +99,12 @@ returns boolean language plpgsql security definer set search_path = public as $$
 declare v_quota public.quota_reservations%rowtype; v_control public.system_controls%rowtype; v_job public.jobs%rowtype;
 begin
   select * into v_control from public.system_controls where id = true for update;
+  if not found or not v_control.accept_new_jobs or not (v_control.allowed_models ? p_model) then
+    raise exception using errcode = 'P0001', message = 'image provider is disabled';
+  end if;
   select * into v_job from public.jobs where id = p_job_id for update;
   select * into v_quota from public.quota_reservations where job_id = p_job_id for update;
-  if not found or not v_control.accept_new_jobs or not (v_control.allowed_models ? p_model)
+  if not found
     or v_job.status not in ('queued', 'running') or v_job.image_model <> p_model
     or v_quota.charge_state = 'released' or v_quota.confirmed_image_calls + v_quota.inflight_image_calls + 1 > v_quota.reserved_image_calls then
     raise exception using errcode = 'P0001', message = 'image call is unavailable';

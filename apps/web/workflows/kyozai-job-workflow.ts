@@ -5,6 +5,8 @@ export type KyozaiWorkflowInput = {
   leaseOwner: string;
 };
 
+import { DURABLE_CONTENT_STAGES } from "../lib/kyozai/durable-stages";
+
 /**
  * Durable orchestration boundary. Keep this function free of I/O: Workflow SDK
  * records its state, while the isolated step below performs the database and
@@ -24,7 +26,7 @@ export async function durableKyozaiJobWorkflow(input: KyozaiWorkflowInput): Prom
 async function runDurableStages(input: KyozaiWorkflowInput): Promise<"completed" | string> {
   try {
     let slideCount = 0;
-    for (const stage of ["source_ingest", "analysis", "slide_map", "script_timing", "content_freeze", "design"] as const) {
+    for (const stage of DURABLE_CONTENT_STAGES) {
       await renewLeaseStep(input);
       const content = await runContentStep(input, stage);
       if (content) slideCount = content.slideCount;
@@ -41,7 +43,7 @@ async function runDurableStages(input: KyozaiWorkflowInput): Promise<"completed"
   }
 }
 
-async function runContentStep(input: KyozaiWorkflowInput, stage: "source_ingest" | "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design"): Promise<{ slideCount: number } | undefined> {
+async function runContentStep(input: KyozaiWorkflowInput, stage: (typeof DURABLE_CONTENT_STAGES)[number]): Promise<{ slideCount: number } | undefined> {
   "use step";
   const { runKyozaiContentStage } = await import("../lib/kyozai/job-workflow");
   return runKyozaiContentStage(input.jobId, input.revisionId, stage);

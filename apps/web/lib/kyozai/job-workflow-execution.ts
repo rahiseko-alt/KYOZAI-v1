@@ -1,15 +1,16 @@
-import { finalizePackage, isBusyStageError, loadExecutableJob, loadOrCreatePackage, markJobCompleted, markWorkflowFailed, renderSlides, type DurableContentStage } from "./job-workflow";
+import { finalizePackage, isBusyStageError, loadExecutableJob, loadOrCreatePackage, markJobCompleted, markWorkflowFailed, renderSlides } from "./job-workflow";
+import { DURABLE_CONTENT_STAGES, type DurableContentStage } from "./durable-stages";
 
 /** A Workflow step may run this repeatedly; completed content artifacts are reused. */
 export async function runKyozaiContentStages(jobId: string, revisionId: string): Promise<{ slideCount: number }> {
-  for (const stage of CONTENT_STAGES) {
+  for (const stage of DURABLE_CONTENT_STAGES) {
     const result = await runKyozaiContentStage(jobId, revisionId, stage);
     if (result) return result;
   }
   throw new Error("content_design_unavailable");
 }
 
-export const CONTENT_STAGES: readonly DurableContentStage[] = ["source_ingest", "analysis", "slide_map", "script_timing", "content_freeze", "design"];
+export const CONTENT_STAGES = DURABLE_CONTENT_STAGES;
 
 /** Exactly one content contract stage per Workflow step. */
 export async function runKyozaiContentStage(jobId: string, revisionId: string, stage: DurableContentStage): Promise<{ slideCount: number } | undefined> {

@@ -19,11 +19,13 @@ import type { RenderedSlideImage } from "./image-types";
 import { mockPackage } from "./mock";
 import type { SourceInput, TeachingAnalysis, TeachingPackage } from "./types";
 import type { ScriptStage, SlideMap } from "./content-pipeline";
+import type { DurableContentStage } from "./durable-stages";
+import { reserveLogicalImageCall } from "./image-call-reservation";
 
 const ARTIFACT_BUCKET = "kyozai-artifacts";
 type StoredArtifact = { id: string; storagePath: string; sha256: string; bytes: Buffer };
 type StageRun = { id: string; attempt: number; leaseOwner: string };
-export type DurableContentStage = "source_ingest" | "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design";
+export type { DurableContentStage } from "./durable-stages";
 function artifactPath(jobId: string, revisionId: string, lifecycle: "draft" | "validated", id: string, name: string) {
   return `${jobId}/${revisionId}/${lifecycle}/${id}-${name}`;
 }
@@ -210,15 +212,7 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
     } else {
       let created: (RenderedSlideImage & { bytes: Buffer; artifactId: string }) | undefined;
       const outputIds = await withStage(jobId, revisionId, "image_generate", slide.number, async (run) => {
-        const requestFingerprint = `stage-run:${run.id}`;
-        const reserve = await createServerSupabaseClient().rpc("reserve_kyozai_image_call", {
-          p_job_id: jobId,
-          p_revision_id: revisionId,
-          p_stage_run_id: run.id,
-          p_model: modelId,
-          p_request_fingerprint: requestFingerprint,
-        });
-        if (reserve.error || reserve.data !== true) throw new Error("provider_budget_unavailable");
+        const requestFingerprint = await reserveLogicalImageCall(jobId, revisionId, run.id, modelId, teachingPackage, slide);
         try {
           const rendered = process.env.KYOZAI_E2E_MODE === "1" ? await mockRenderedSlide(teachingPackage, slide, modelId) : await renderValidatedSlide(teachingPackage, slide, modelId, Date.now() + 14 * 60_000);
           const bytes = Buffer.from(rendered.data, "base64");
