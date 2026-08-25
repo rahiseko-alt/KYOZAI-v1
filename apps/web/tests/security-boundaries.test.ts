@@ -5,6 +5,7 @@ import { POST as renderSlide } from "../app/api/render-slide/route";
 import { POST as revise } from "../app/api/revise/route";
 import { POST as createJob } from "../app/api/jobs/route";
 import { POST as createUpload } from "../app/api/uploads/route";
+import { GET as dispatchJobs, POST as dispatchJobsManually } from "../app/api/internal/jobs/dispatch/route";
 import { readBoundedText } from "../lib/kyozai/bounded-body";
 import { generationIsAvailable } from "../lib/kyozai/generation-access";
 
@@ -32,12 +33,16 @@ describe("公開生成境界", () => {
   it("productionの永続job APIも設定や認証より先に拒否する", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("KYOZAI_ASYNC_JOBS_ENABLED", "1");
-    const [job, upload] = await Promise.all([
+    const [job, upload, dispatch, manualDispatch] = await Promise.all([
       createJob(new Request("https://example.test/api/jobs", { method: "POST", headers: { "idempotency-key": "test" }, body: "{}" })),
       createUpload(new Request("https://example.test/api/uploads", { method: "POST", body: "{}" })),
+      dispatchJobs(new Request("https://example.test/api/internal/jobs/dispatch", { headers: { authorization: "Bearer ignored" } })),
+      dispatchJobsManually(new Request("https://example.test/api/internal/jobs/dispatch", { method: "POST", headers: { authorization: "Bearer ignored" } })),
     ]);
     expect(job.status).toBe(404);
     expect(upload.status).toBe(404);
+    expect(dispatch.status).toBe(404);
+    expect(manualDispatch.status).toBe(404);
   });
 
   it("chunked requestを読み切る前に実バイト上限で拒否する", async () => {

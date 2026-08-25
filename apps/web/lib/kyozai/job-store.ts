@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { isKyozaiJobStage, type ArtifactManifestEntry, type StageLedgerEntry } from "../../../../shared/kyozai-job-contract";
 
 import { createServerSupabaseClient } from "../supabase/server";
+import { assertSafePdf, PdfInputError, pdfLimits } from "./pdf-safety";
 import { badRequest, conflict, payloadTooLarge, PublicHttpError, routeUnavailable } from "./http-errors";
 import type { AuthenticatedJobUser } from "./job-auth";
 import type { KyozaiJobSnapshot } from "./job-client";
@@ -112,7 +113,15 @@ async function finalizeUploads(user: AuthenticatedJobUser, attachmentIds: string
     if (downloadError || !blob) throw badRequest("添付ファイルを確認できません。再アップロードしてください。");
     if (blob.size > Number(session.byte_limit)) throw payloadTooLarge("添付ファイルが申告サイズを超えています。");
     const bytes = Buffer.from(await blob.arrayBuffer());
-    if (session.media_type === "application/pdf" && bytes.subarray(0, 5).toString("ascii") !== "%PDF-") throw badRequest("PDFファイルを確認できません。");
+    if (bytes.length > pdfLimits.maxBytes) throw payloadTooLarge("添付ファイルは25MiB以下にしてください。");
+    if (session.media_type === "application/pdf") {
+      try {
+        await assertSafePdf(bytes);
+      } catch (error) {
+        if (error instanceof PdfInputError && error.code === "pdf_too_large") throw payloadTooLarge("添付ファイルは25MiB以下にしてください。");
+        throw badRequest("PDFファイルを確認できません。");
+      }
+    }
     if (session.media_type !== "application/pdf" && bytes.includes(0)) throw badRequest("テキストファイルを確認できません。");
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const { error: updateError } = await supabase.from("upload_sessions").update({ byte_size: bytes.length, sha256 }).eq("id", session.id).eq("owner_id", user.id);
