@@ -29,9 +29,14 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 | YouTubeを一般HTMLとして取得 | 専用extractorでメタデータ・字幕を取得 | G3 |
 | 参考画像を入力不能 | 独立design profileと原本hashを保存 | G3 |
 | revision candidateが実行されない | revision単位dispatchと検証昇格 | G4 |
+| revision元を所有者確認前にservice roleで読む | 所有者を最初に確定してから原artifactを読む | G4 |
 | 期限切れ・未使用uploadを削除しない | 自動期限切れ・物理削除 | G5 |
 | 再開時にartifactを再検証しない | 利用直前にbyte数・SHA-256を検証 | G5 |
 | 待ち時間・原価・削除失敗を測定しない | queue、stage、費用、削除SLOを監視 | G5 |
+| Preview E2E固定値が外部のDeployment Protectionを前提にする | Preview test credentialを公開固定値へ依存させない | G5 |
+| durable jobのE2E mockがProduction環境を二重確認しない | Productionでは設定残存時もmockを実行不能にする | G6 |
+| packageの由来と`real`申告を自己整合性だけで判定する | 外部attestationと再検証可能な非案件metadataで由来を証明 | G6 |
+| pair validatorが教材内容の同等性を採点しない | 匿名blind評価の主体、rubric、件数、証拠形式を固定 | G6 |
 
 ## Gate
 

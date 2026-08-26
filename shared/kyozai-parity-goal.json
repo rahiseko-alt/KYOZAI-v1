@@ -10,7 +10,7 @@
     {
       "id": "G0",
       "status": "completed",
-      "goalContribution": "Reject corrupted or fabricated parity packages before more product work begins.",
+      "goalContribution": "Reject structurally corrupted or internally inconsistent parity packages before more product work begins.",
       "acceptanceEvidence": ["negative_packages_rejected", "canonical_skill_real_package_accepted", "skill_baseline_unchanged"],
       "gaps": [],
       "evidence": [
@@ -45,21 +45,21 @@
       "status": "pending",
       "goalContribution": "Execute typed immutable revisions without unrelated changes.",
       "acceptanceEvidence": ["three_revision_runs", "zero_untargeted_diffs", "rollback_proof"],
-      "gaps": ["inert_revision_candidate"]
+      "gaps": ["inert_revision_candidate", "revision_read_before_owner_check"]
     },
     {
       "id": "G5",
       "status": "pending",
       "goalContribution": "Prove deletion, integrity, cost and operational safety.",
       "acceptanceEvidence": ["fault_injection_matrix", "physical_deletion_record", "operational_slo_report"],
-      "gaps": ["missing_expiry_cleanup", "missing_resume_rehash", "missing_operational_measurement"]
+      "gaps": ["missing_expiry_cleanup", "missing_resume_rehash", "missing_operational_measurement", "preview_e2e_secret_boundary"]
     },
     {
       "id": "G6",
       "status": "pending",
       "goalContribution": "Compare all five real fixtures and reopen authenticated Production generation.",
       "acceptanceEvidence": ["five_fixture_blind_evidence", "production_pc_mobile_e2e", "production_url_and_commit_sha"],
-      "gaps": ["production_generation_locked"]
+      "gaps": ["production_generation_locked", "production_e2e_mock_guard", "unverified_real_package_provenance", "missing_blind_semantic_rubric"]
     }
   ],
   "outOfScopeUntilGoal": ["kyozai_support", "kyozai_movie", "kyozai_orchestrator", "pptx_export", "advanced_manual_editor"]

@@ -34,3 +34,73 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 想定影響: CodeRabbitによる定性的な自動レビュー結果はG0証拠に含まれない。
 - 再審議時の候補対応: CodeRabbitのOSS設定、review trigger条件、別の必須review経路を確認する。
 - 状態: goal_after_review
+
+## R-20260826-02 G0 package証拠が自己整合性を超える由来を証明しない
+
+- 発見日: 2026-08-26
+- 発見Gate: G1（G0監査指摘）
+- 症状: `evidenceMode`、producer、時刻、hashはpackage作成者が一貫して作り直せるため、validatorが
+  証明するのは破損・内部矛盾の不在であり、外部由来や非捏造性そのものではない。また正本Skill実packageの
+  検証metadataがリポジトリまたは外部artifactとして第三者から再取得できない。
+- 再現方法: 内容を一貫して作ったpackageのmanifest、ledger、QA、全hashを再計算し、normal modeで検証する。
+- 放置可能な根拠: G1は同validatorによるSkill／APP同等性を合格条件にせず、Previewの実DB、provider usage、
+  Storage実byte、terminal状態を外部事実で直接確認する。現在のG1実装・故障注入を妨げない。
+- 想定影響: G0の`fabricated packageを拒否`というgoal contributionは過大であり、現状の外部証拠だけでは
+  正本Skill実packageの再検証性が不足する。
+- 再審議時の候補対応: 主張を内部整合性検証へ限定するか、由来を検証可能な署名・CI attestationを追加する。
+  案件データを含まないevidence metadataを外部CI artifactまたはリポジトリへ残し、G6開始前にG0状態を再判定する。
+- 状態: goal_after_review
+
+## R-20260826-03 blind evidenceが内容品質の同等性を判定しない
+
+- 発見日: 2026-08-26
+- 発見Gate: G1（G0監査指摘）
+- 症状: pair validatorはfixture、source hash、工程契約、design profileを揃えるが、deckの主張・学習順・台本・
+  視認性のSkill／APP差を採点しない。CI名`Validate blind parity measurement`も合成fixtureの計測器テストと
+  実fixture評価を区別しにくい。JSON Schemaはcompile検査だけで実package validationへ使っていない。
+- 再現方法: 同じsource hashを持ち、各々のmanifestとhashが整合するがdeck本文が異なる2packageをpair modeへ渡す。
+- 放置可能な根拠: G1は直接入力APP単体の耐久性Gateであり、Skill／APPの内容blind比較はG6の合格条件である。
+- 想定影響: validator出力だけをG6の同等性証拠と誤認すると、内容品質の差を見逃す。手書き検証とSchemaの
+  二重管理にも将来の乖離余地がある。
+- 再審議時の候補対応: G6前に匿名blind評価の採点者、rubric、最低件数、同点基準、証拠形式を固定する。
+  CI名をcontract-validator testと分かる名称へ変え、実packageへSchemaを適用するか二重管理を廃止する。
+- 状態: goal_after_review
+
+## R-20260826-04 durable jobのE2E mock判定にProduction二重ガードがない
+
+- 発見日: 2026-08-26
+- 発見Gate: G1
+- 症状: `job-workflow.ts`の固定教材・固定画像分岐だけが`KYOZAI_E2E_MODE === "1"`を単独判定し、
+  `VERCEL_ENV !== "production"`を同時確認しない。
+- 再現方法: Production相当envでE2E modeを有効にし、durable workflowのcontent/image stageを実行する。
+- 放置可能な根拠: G1からG5までProduction生成はコード上404で、G1実fixtureではE2E modeを無効にする。
+- 想定影響: G6でProduction生成を再開するとき環境変数が残っていれば、モック教材を実成果物として配信し得る。
+- 再審議時の候補対応: G6のProduction解錠前に共通`isE2eModeAllowed`へ全入口を統一し、Productionでは
+  E2E modeが常にfalseとなる回帰テストを追加する。
+- 状態: goal_after_review
+
+## R-20260826-05 Preview E2E用公開固定値の安全前提がコード外にある
+
+- 発見日: 2026-08-26
+- 発見Gate: G1
+- 症状: E2E modeのPreviewでは公開リポジトリ内の固定値をrender grant署名とrate-limit識別へ使う。
+  Deployment Protectionが有効という外部前提をコードから検証できない。
+- 再現方法: protectionのないPreview相当環境でE2E modeを有効にし、公開固定値からgrantまたはactor hashを再現する。
+- 放置可能な根拠: G1実Provider fixtureはE2E modeを無効にし、固定値経路を使用しない。Productionでも二重ガード済み。
+- 想定影響: 保護されていないE2E Previewを外部公開した場合、grant偽造とactor識別予測が可能になる。
+- 再審議時の候補対応: G5でDeployment Protectionの外部証拠を必須化するか、Previewでもprocess内一時値または
+  運用者登録の専用値だけを使い、公開固定値を廃止する。
+- 状態: goal_after_review
+
+## R-20260826-06 revision元artifactを所有者確認より先に読む
+
+- 発見日: 2026-08-26
+- 発見Gate: G1
+- 症状: `createRevisionCandidate`はservice roleでbase revisionとdeck artifactを取得・downloadした後に、
+  revision作成RPCで初めて`p_owner_id`を検証する。
+- 再現方法: 別所有者のjob IDとbase revisionをrevision APIへ渡し、所有者検証前のread経路を追う。
+- 放置可能な根拠: G1はrevision APIを使用せず、G4が自然文修正と所有者分離を検証するGateである。
+- 想定影響: UUID推測難度は高いが、他者artifactへのservice-role readと応答差による存在オラクルを作り得る。
+- 再審議時の候補対応: G4で最初にjob所有者を同一query/RPCで確定し、その後だけbase revisionとartifactを読む。
+  不一致と不存在の外部応答を同一化する。
+- 状態: goal_after_review
