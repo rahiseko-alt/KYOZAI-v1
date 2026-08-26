@@ -24,7 +24,7 @@
       "status": "in_progress",
       "goalContribution": "Complete one real direct-text job through the durable APP path.",
       "acceptanceEvidence": ["preview_real_provider_run", "fault_recovery_matrix", "provider_usage_reconciliation"],
-      "gaps": ["missing_real_vertical_proof", "cron_deployment_split", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount"]
+      "gaps": ["missing_real_vertical_proof", "zero_cost_dispatcher", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount"]
     },
     {
       "id": "G2",

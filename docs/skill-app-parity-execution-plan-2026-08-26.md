@@ -19,7 +19,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 |---|---|---|
 | 空manifest・空QA・工程逆順を検出しない | 実成果物、工程順、時刻、hash、QA内容を検証 | G0 |
 | 実DB・Storage・Workflow・providerの証拠がない | disposable Previewで実Provider縦断を残す | G1 |
-| Cronが配備単位と分離 | 配備される設定へdispatcher／cleanupを統合 | G1 |
+| Vercel 5分Cronは0円運用制約と両立しない | 無料Supabase内schedulerから認証済みdispatcher／cleanupを起動し、Vercel設定にCronを置かない | G1 |
 | stage間cancelが残留 | 全境界でterminalへ確定 | G1 |
 | provider成功直後から回収不能 | 二重課金せず結果を回収・再開 | G1 |
 | 本文、再画像、画像QAを費用計上しない | 全provider試行をusageへ記録 | G1 |
@@ -58,6 +58,16 @@ Production E2E mock遮断、Preview E2E固定値の撤廃、revision所有者先
 この補正で解決済みとなったG4所有者先行確認、G5 Preview E2E固定値、G6 Production E2E mock遮断、
 G6 blind semantic rubricは`shared/kyozai-parity-goal.json`の未解決gapから除外した。外部attestationを伴う
 実package由来は未取得のため、G6 gapとして残す。
+
+## 2026-08-27 0円運用への計画変更
+
+利用者が「サーバーの運用費だけ0円、AI生成API費用は利用者ごとの実費」と決定した。したがって
+Vercel有料planへの変更は選択肢から除外する。G1は、無料Supabase projectで`pg_cron`／`pg_net`を用い、
+認証済みVercel dispatcherとcleanupを起動する構成へ変更する。
+
+この構成の合格証拠は、(1) VercelがCronなしでPreview配備できること、(2) Supabaseからdispatcherと
+cleanupが実行されること、(3) Free tierの上限・停止時に新規provider呼出しをfail-closedで止めること、
+の3点とする。無料枠で利用できない機能が判明した場合、有料化は行わず、受付停止と計画再審議へ戻る。
 
 ## 計画外問題
 

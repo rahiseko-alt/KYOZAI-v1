@@ -1,12 +1,12 @@
 # KYOZAI handoff
 
-更新: 2026-08-26
+更新: 2026-08-27
 
 ## 現在のGate
 
 - `【寄り道中 1/1｜G1-CRON-002｜復帰先Gate G1】`
 - Gate: G1（直接入力の実縦断）
-- ブランチ: `codex/g1-direct-input`
+- ブランチ: `codex/g1-resume`
 - 親Gate: G1
 - ゴールへの寄与: 直接入力を実DB・Storage・Workflow・Providerで完走させ、停止後も
   二重課金なく完了またはterminal状態へ到達させる。
@@ -14,14 +14,15 @@
 
 ## 復帰先
 
-- provider checkpoint、キャンセルsweeper、配備Cronのローカル実装、監査補正、158テストは合格済み。
-- `G1-CRON-002`の終了条件: 現行頻度を許容するVercel plan、またはHobbyでも即時dispatchと有限時間retryを
-  保証する計画変更のどちらかを利用者が選ぶ。
+- provider checkpoint、キャンセルsweeper、監査補正、158テストは合格済み。
+- 利用者決定: 運用費は0円、AI生成API費用だけを利用者ごとの実費とする。有料Vercel planは使わない。
+- `G1-CRON-002`の終了条件: Vercel Cronを除去し、無料Supabaseのschedulerから認証済みdispatcher／cleanupを
+  起動するmigrationとPreview実行証拠を得る。無料枠で不可能なら受付停止と計画再審議へ戻る。
 - 終了後はdisposable Previewでmigration適用と実縦断へ戻る。
 
 ## 外部ブロッカー
 
 - disposable Preview Supabaseが未接続で、migration、private bucket、RLSの実適用証拠がない。
 - Previewには必須環境変数が揃っていない。秘密値は運用者がエージェントを経由せず直接登録する。
-- Vercel Hobbyは5分間隔Cronを拒否するため、現行`apps/web/vercel.json`ではPreview配備自体が失敗する。
+- Vercel Hobbyは5分間隔Cronを拒否する。Vercel Cronを無料Supabase schedulerへ移す実装と実証が未完了。
 - 上記が揃うまでPreview実Provider完走、usage突合、物理artifact hash一致は判定できない。

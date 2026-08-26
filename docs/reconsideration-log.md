@@ -114,3 +114,10 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
   blind semantic evidence／実package provenance evidenceのschemaと検証器。
 - 非実施範囲: 実Provider packageのattestation生成、G2以降の機能実装、Cron構成変更。
 - 状態: implemented_under_explicit_exception
+
+## 2026-08-27 G1-CRON-002の方針決定
+
+- 利用者決定: サーバー運用費は0円とし、AI生成API費用だけを利用者ごとの実費として扱う。
+- 採用方針: 有料Vercel Cronは使わず、無料Supabase projectの`pg_cron`／`pg_net`から認証済みVercel endpointを起動する。
+- 未確定事項: Free tierでschedulerが実際に利用可能か、休止・上限時にfail-closedできるかはPreviewで実証する。
+- 状態: implementation_required
