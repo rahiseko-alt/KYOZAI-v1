@@ -1523,3 +1523,31 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 永続job用のテーブル、RLS、outbox、Workflow SDKを追加した段階で、実際に受理jobが起動・中断回復・費用制限・成果物検証まで到達するかを破壊試験で確認しなかった。Production Cronは内部routeを404にして起動不能、Previewには定期dispatcherがなくpendingのまま停止した。また所有者向け`for all` RLSが受付後の入力・画像モデル・状態を本人に書き換え可能にしていた。schemaを置くことは境界を実装した証拠ではない。
 
 今後は、公開前に少なくとも「dispatcher開始直後の喪失」「Workflow step停止」「期限切れlease」「同時配送」「provider呼出直前の予算確認」「Storage読戻しhash不一致」「所有者の直接更新」を意図的に壊して検証する。これらのいずれかがfail-closedでない限り、Productionの生成経路は404のまま維持する。
+## 2026-08-26 G0の合格条件へG6のSkill／APP比較条件を混入した
+
+- **何が起きたか**：正本計画ではG0の実証拠は正本Skillの実packageであるのに、handoffで
+  同一入力のSkill／APP両packageを要求し、G1のPreview環境不足をG0の停止理由にした。
+- **影響**：G0単独で実行可能な正本Skill検証を進めず、次Gateの外部条件を待つ状態にした。
+- **原因**：最終ゴールのペア比較条件と、現Gate固有の合格条件を分離せずに要約した。
+- **修正**：実行計画、goal contract、handoffのG0証拠を
+  `canonical_skill_real_package_accepted`へ統一した。Skill／APPの全fixture比較はG6に維持する。
+- **再発防止**：停止理由を記録する前に、実行正本の現Gate行とgoal contractの
+  `acceptanceEvidence`を照合する。
+
+## 2026-08-26 モンタージュ作成前に利用可能な画像処理経路を確認しなかった
+
+- **何が起きたか**：正本Skill実packageの画像寸法確認で、未導入のImageMagickを実行して失敗した。
+  続けてworkspace dependency取得機能もこの環境ではhandler未登録で失敗した。またhandoff更新時に、
+  同一パッチ内で同じファイルを削除・再追加しようとして編集機構に拒否された。
+- **影響**：画像生成物やリポジトリの既存内容への変更はなく、検証開始と記録更新が遅れた。
+- **修正**：リポジトリに導入済みの`sharp`で寸法確認とモンタージュ生成を完了し、handoffは内容置換で更新した。
+- **再発防止**：画像処理はアプリが実際に利用している`sharp`を第一候補とし、既存ファイルの全置換も
+  `Update File`で行う。
+
+## 2026-08-26 G0のstage後差分検査で末尾空白を検出した
+
+- **何が起きたか**：新しい実行正本の制定日と状態の2行にMarkdown改行用の末尾空白があり、
+  `git diff --cached --check`が不合格になった。
+- **影響**：コミット前に検出したため、CI、公開物、履歴への影響はない。
+- **修正**：該当2行の末尾空白を除去した。
+- **再発防止**：Markdownでも意図的な末尾空白を使わず、段落または空行で改行を表現する。

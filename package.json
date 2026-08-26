@@ -14,6 +14,7 @@
     "test": "pnpm -r test",
     "audit": "pnpm audit --audit-level moderate",
     "validate:skills": "node scripts/validate-skills.mjs",
+    "validate:goal": "node scripts/validate-goal-contract.mjs",
     "validate:process": "node scripts/validate-process-contract.mjs",
     "validate:blind-parity": "node scripts/validate-blind-parity.test.mjs",
     "validate:revise": "node scripts/validate-revision-benchmark.mjs && node --test .agents/skills/kyozai-revise/scripts/validate_revision.test.mjs"

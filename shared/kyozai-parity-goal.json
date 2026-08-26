@@ -1,0 +1,61 @@
+{
+  "id": "kyozai-skill-app-parity",
+  "version": "2026-08-26",
+  "canonicalPlan": "docs/skill-app-parity-execution-plan-2026-08-26.md",
+  "status": "in_progress",
+  "activeGate": "G0",
+  "productionGeneration": "locked_404",
+  "fixtures": ["direct_text", "long_pdf", "youtube_captioned", "reference_design", "natural_language_revision"],
+  "gates": [
+    {
+      "id": "G0",
+      "status": "in_progress",
+      "goalContribution": "Reject corrupted or fabricated parity packages before more product work begins.",
+      "acceptanceEvidence": ["negative_packages_rejected", "canonical_skill_real_package_accepted", "skill_baseline_unchanged"],
+      "gaps": ["pending_commit_and_ci_external_evidence"]
+    },
+    {
+      "id": "G1",
+      "status": "pending",
+      "goalContribution": "Complete one real direct-text job through the durable APP path.",
+      "acceptanceEvidence": ["preview_real_provider_run", "fault_recovery_matrix", "provider_usage_reconciliation"],
+      "gaps": ["missing_real_vertical_proof", "cron_deployment_split", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount"]
+    },
+    {
+      "id": "G2",
+      "status": "pending",
+      "goalContribution": "Make document ingestion traceable and delivery complete.",
+      "acceptanceEvidence": ["long_pdf_run", "long_markdown_run", "manifest_file_reconciliation"],
+      "gaps": ["missing_source_chunks", "upload_quota_race", "missing_source_delivery"]
+    },
+    {
+      "id": "G3",
+      "status": "pending",
+      "goalContribution": "Match the canonical YouTube and reference-design inputs.",
+      "acceptanceEvidence": ["captioned_youtube_run", "reference_design_run"],
+      "gaps": ["youtube_html_instead_of_captions", "missing_reference_design_input"]
+    },
+    {
+      "id": "G4",
+      "status": "pending",
+      "goalContribution": "Execute typed immutable revisions without unrelated changes.",
+      "acceptanceEvidence": ["three_revision_runs", "zero_untargeted_diffs", "rollback_proof"],
+      "gaps": ["inert_revision_candidate"]
+    },
+    {
+      "id": "G5",
+      "status": "pending",
+      "goalContribution": "Prove deletion, integrity, cost and operational safety.",
+      "acceptanceEvidence": ["fault_injection_matrix", "physical_deletion_record", "operational_slo_report"],
+      "gaps": ["missing_expiry_cleanup", "missing_resume_rehash", "missing_operational_measurement"]
+    },
+    {
+      "id": "G6",
+      "status": "pending",
+      "goalContribution": "Compare all five real fixtures and reopen authenticated Production generation.",
+      "acceptanceEvidence": ["five_fixture_blind_evidence", "production_pc_mobile_e2e", "production_url_and_commit_sha"],
+      "gaps": ["production_generation_locked"]
+    }
+  ],
+  "outOfScopeUntilGoal": ["kyozai_support", "kyozai_movie", "kyozai_orchestrator", "pptx_export", "advanced_manual_editor"]
+}
