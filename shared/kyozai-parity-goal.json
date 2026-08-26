@@ -3,20 +3,25 @@
   "version": "2026-08-26",
   "canonicalPlan": "docs/skill-app-parity-execution-plan-2026-08-26.md",
   "status": "in_progress",
-  "activeGate": "G0",
+  "activeGate": "G1",
   "productionGeneration": "locked_404",
   "fixtures": ["direct_text", "long_pdf", "youtube_captioned", "reference_design", "natural_language_revision"],
   "gates": [
     {
       "id": "G0",
-      "status": "in_progress",
-      "goalContribution": "Reject corrupted or fabricated parity packages before more product work begins.",
+      "status": "completed",
+      "goalContribution": "Reject structurally corrupted or internally inconsistent parity packages before more product work begins.",
       "acceptanceEvidence": ["negative_packages_rejected", "canonical_skill_real_package_accepted", "skill_baseline_unchanged"],
-      "gaps": ["pending_commit_and_ci_external_evidence"]
+      "gaps": [],
+      "evidence": [
+        "commit:52d67308cd0ebd4e1f74434f48af02511a8fe39e",
+        "pr:https://github.com/rahiseko-alt/KYOZAI-v1/pull/24",
+        "ci:https://github.com/rahiseko-alt/KYOZAI-v1/actions/runs/32916846631"
+      ]
     },
     {
       "id": "G1",
-      "status": "pending",
+      "status": "in_progress",
       "goalContribution": "Complete one real direct-text job through the durable APP path.",
       "acceptanceEvidence": ["preview_real_provider_run", "fault_recovery_matrix", "provider_usage_reconciliation"],
       "gaps": ["missing_real_vertical_proof", "cron_deployment_split", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount"]
@@ -54,7 +59,7 @@
       "status": "pending",
       "goalContribution": "Compare all five real fixtures and reopen authenticated Production generation.",
       "acceptanceEvidence": ["five_fixture_blind_evidence", "production_pc_mobile_e2e", "production_url_and_commit_sha"],
-      "gaps": ["production_generation_locked"]
+      "gaps": ["production_generation_locked", "unverified_real_package_provenance"]
     }
   ],
   "outOfScopeUntilGoal": ["kyozai_support", "kyozai_movie", "kyozai_orchestrator", "pptx_export", "advanced_manual_editor"]

@@ -17,9 +17,15 @@ export type InternalDispatchResult =
   | { claimed: true; dispatchId: string; jobId: string; attempts: number; workflowRunId: string };
 
 export class InternalDispatchError extends Error {
-  constructor(readonly code: "dispatch_claim_failed" | "workflow_start_failed" | "workflow_start_uncertain" | "dispatch_complete_failed" | "dispatch_lease_lost" | "dispatch_requeue_failed") {
+  constructor(readonly code: "cancellation_settlement_failed" | "dispatch_claim_failed" | "workflow_start_failed" | "workflow_start_uncertain" | "dispatch_complete_failed" | "dispatch_lease_lost" | "dispatch_requeue_failed") {
     super(code);
   }
+}
+
+export async function settlePendingCancellations() {
+  const { data, error } = await createServerSupabaseClient().rpc("settle_pending_kyozai_cancellations");
+  if (error || !Number.isInteger(data) || Number(data) < 0) throw new InternalDispatchError("cancellation_settlement_failed");
+  return Number(data);
 }
 
 function digest(value: string) {
@@ -91,6 +97,7 @@ export async function startClaimedWorkflow(dispatch: ClaimedWorkflowDispatch): P
 }
 
 export async function runOneInternalDispatch(): Promise<InternalDispatchResult> {
+  await settlePendingCancellations();
   const dispatch = await claimOneWorkflowDispatch();
   if (!dispatch) return { claimed: false };
   try {

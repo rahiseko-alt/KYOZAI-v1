@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mockPackage } from "../lib/kyozai/mock";
+import { e2eEphemeralSecret, isE2eRuntimeAllowed } from "../lib/kyozai/e2e-runtime";
 import { enforceRateLimit } from "../lib/kyozai/rate-limit";
 import { issueRenderGrant, verifyRenderGrant } from "../lib/kyozai/render-grant";
 
@@ -40,11 +41,22 @@ describe("画像生成grantの鍵分離", () => {
     expect(() => verifyRenderGrant(newGrant, mockPackage, "gpt-image-2-medium")).toThrow("検証できません");
   });
 
-  it("productionではE2E固定鍵を使用できない", () => {
+  it("productionではE2E runtimeと署名鍵を使用できない", () => {
     vi.stubEnv("KYOZAI_E2E_MODE", "1");
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("KYOZAI_RENDER_GRANT_SECRET", "");
+    expect(isE2eRuntimeAllowed()).toBe(false);
+    expect(e2eEphemeralSecret()).toBeUndefined();
     expect(() => issueRenderGrant(mockPackage, "gpt-image-2-medium")).toThrow("署名設定がありません");
+  });
+
+  it("Preview E2Eの鍵はprocess内でのみ生成され、公開固定値を持たない", () => {
+    vi.stubEnv("KYOZAI_E2E_MODE", "1");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    const secret = e2eEphemeralSecret();
+    expect(secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(e2eEphemeralSecret()).toBe(secret);
+    expect(secret).not.toContain("kyozai-e2e");
   });
 });
 

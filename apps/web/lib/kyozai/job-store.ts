@@ -145,7 +145,8 @@ export async function createJob(user: AuthenticatedJobUser, raw: CreateJobReques
     p_attachment_ids: request.attachmentIds ?? [],
     p_workflow_version: "kyozai-workflow@1",
     p_reserved_image_calls: 24,
-    p_reserved_cost_units: 24,
+    // 24 image generations + 24 image QA calls + up to 9 structured-text calls.
+    p_reserved_cost_units: 57,
   });
   if (error || !data) {
     if (error?.code === "23505") throw conflict("このIdempotency-Keyは別の入力に使用されています。");
@@ -246,6 +247,11 @@ export async function createRevisionCandidate(user: AuthenticatedJobUser, jobId:
   const text = instruction.trim();
   if (text.length < 3 || text.length > 600) throw badRequest("修正指示を3〜600文字で入力してください。");
   const supabase = createServerSupabaseClient();
+  // The service-role client must establish ownership before reading any
+  // revision or artifact. This gives unowned and nonexistent jobs one path.
+  const { data: owned, error: ownershipError } = await supabase.from("jobs").select("id").eq("id", jobId).eq("owner_id", user.id).is("deleted_at", null).maybeSingle();
+  if (ownershipError) throw new Error("revision_owner_check_failed");
+  if (!owned) throw routeUnavailable();
   const { data: base, error: baseError } = await supabase.from("job_revisions").select("id").eq("job_id", jobId).eq("revision_number", baseRevision).maybeSingle();
   if (baseError || !base) throw routeUnavailable();
   const { data: artifact, error: artifactError } = await supabase.from("artifacts").select("storage_bucket, storage_path").eq("revision_id", base.id).eq("kind", "deck_spec").eq("lifecycle", "final").maybeSingle();

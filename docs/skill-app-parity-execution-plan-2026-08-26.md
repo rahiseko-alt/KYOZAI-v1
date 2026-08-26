@@ -32,6 +32,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 | 期限切れ・未使用uploadを削除しない | 自動期限切れ・物理削除 | G5 |
 | 再開時にartifactを再検証しない | 利用直前にbyte数・SHA-256を検証 | G5 |
 | 待ち時間・原価・削除失敗を測定しない | queue、stage、費用、削除SLOを監視 | G5 |
+| packageの由来と`real`申告を自己整合性だけで判定する | 外部attestationと再検証可能な非案件metadataで由来を証明 | G6 |
 
 ## Gate
 
@@ -47,6 +48,16 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 
 Gateの不足項目と証拠は `shared/kyozai-parity-goal.json` を機械可読な正本とする。
 PRはGateごとに1本とし、合格前に次Gateへ進まない。
+
+## 2026-08-26 監査補正の例外
+
+`G1-CRON-002`が外部の配備制約により停止している間、利用者の明示指示により、監査で確認された
+Production E2E mock遮断、Preview E2E固定値の撤廃、revision所有者先行確認、由来・blind証拠契約の
+不足だけを同じG1 PR内で補正する。この例外はG2以降の機能実装やGateの前倒しを許可しない。
+各補正は、G1の安全な実縦断とG6の証拠正当性を直接守る回帰テストまたは機械検証を合格証拠とする。
+この補正で解決済みとなったG4所有者先行確認、G5 Preview E2E固定値、G6 Production E2E mock遮断、
+G6 blind semantic rubricは`shared/kyozai-parity-goal.json`の未解決gapから除外した。外部attestationを伴う
+実package由来は未取得のため、G6 gapとして残す。
 
 ## 計画外問題
 

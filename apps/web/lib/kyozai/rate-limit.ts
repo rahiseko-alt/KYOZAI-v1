@@ -1,5 +1,6 @@
 import { createHmac, createHash } from "node:crypto";
 
+import { e2eEphemeralSecret, isE2eRuntimeAllowed } from "./e2e-runtime";
 import { PublicHttpError } from "./http-errors";
 
 export type RateLimitPolicy = "generate" | "revise" | "render-slide";
@@ -9,7 +10,6 @@ type Bucket = { key: string; limit: number; windowMs: number };
 
 const FIFTEEN_MINUTES = 15 * 60_000;
 const ONE_DAY = 24 * 60 * 60_000;
-const E2E_ID_SECRET = "kyozai-e2e-rate-limit-id-secret-32-bytes-minimum";
 const ACTOR_LIMITS: Record<RateLimitPolicy, number> = { generate: 3, revise: 8, "render-slide": 24 };
 const GLOBAL_LIMITS: Record<RateLimitPolicy, number> = { generate: 30, revise: 80, "render-slide": 120 };
 const localWindows = new Map<string, { count: number; expiresAt: number }>();
@@ -45,11 +45,12 @@ function isVercel() {
 }
 
 function localMode() {
-  return !isVercel() || (process.env.KYOZAI_E2E_MODE === "1" && process.env.VERCEL_ENV !== "production");
+  return !isVercel() || isE2eRuntimeAllowed();
 }
 
 function idSecret() {
-  if (process.env.KYOZAI_E2E_MODE === "1" && process.env.VERCEL_ENV !== "production") return E2E_ID_SECRET;
+  const e2eSecret = e2eEphemeralSecret();
+  if (e2eSecret) return e2eSecret;
   const value = process.env.KYOZAI_RATE_LIMIT_ID_SECRET;
   if (!value || Buffer.byteLength(value, "utf8") < 32) throw unavailable();
   return value;

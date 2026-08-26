@@ -261,17 +261,15 @@ describe("AI構造化応答", () => {
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
-  it("OpenAI接続のTimeoutError後に残り時間内で再試行する", async () => {
+  it("OpenAI接続のTimeoutError後に二重生成を避けて自動再送しない", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const fetchMock = vi.fn<typeof fetch>()
-      .mockRejectedValueOnce(new DOMException("request timed out", "TimeoutError"))
-      .mockResolvedValueOnce(completed(analysis, "response-after-timeout"));
-    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
+      .mockRejectedValueOnce(new DOMException("request timed out", "TimeoutError"));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る", Date.now() + 120_000))
-      .resolves.toMatchObject({ title: mockPackage.title, process: { analysis } });
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+      .rejects.toThrow("自動再送はしていません");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("routeの残り時間が足りない場合は新しいAI試行を開始しない", async () => {
@@ -287,7 +285,7 @@ describe("AI構造化応答", () => {
 
   it("再試行後も壊れたJSONなら人間向けエラーに置き換える", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({
       id: "response-invalid",
       status: "completed",
       output: [{ content: [{ type: "output_text", text: '{"title":"途中' }] }],

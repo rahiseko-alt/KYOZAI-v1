@@ -1551,3 +1551,79 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：コミット前に検出したため、CI、公開物、履歴への影響はない。
 - **修正**：該当2行の末尾空白を除去した。
 - **再発防止**：Markdownでも意図的な末尾空白を使わず、段落または空行で改行を表現する。
+
+## 2026-08-26 G1監査でWindows非対応のglobと存在しないテスト名を指定した
+
+- **何が起きたか**：migration検索へ`supabase/migrations/*.sql`を直接渡し、PowerShell上で期待どおり
+  展開されず読取に失敗した。また、存在確認前に`apps/web/tests/content-generation.test.ts`を指定した。
+- **影響**：読取専用コマンドだけが失敗し、ファイル変更や検査結果への影響はない。
+- **修正**：`rg`へdirectoryを渡し、`rg --files`と実在するテスト名から監査を再開した。
+- **再発防止**：Windowsでは検索対象directoryを直接渡し、個別ファイルは`rg --files`で存在確認してから読む。
+
+## 2026-08-26 G1本文provider回収の大きなpatchがcontext不一致で失敗した
+
+- **何が起きたか**：`openai.ts`の広い範囲を一度に置換しようとして、既存コードとpatch contextが一致せず
+  適用されなかった。
+- **影響**：編集機構が全体を拒否したため部分適用はなく、作業時間だけを失った。
+- **修正**：対象関数を小さい範囲で読み直し、`requestStructured`単位のpatchとして適用した。
+- **再発防止**：通信・再試行処理の変更は関数境界で最新内容を再取得してから編集する。
+
+## 2026-08-26 G1テストfixtureが同じResponseを再利用して回収不能と誤判定された
+
+- **何が起きたか**：壊れたJSONを2回返すテストが、bodyを一度しか読めない同一`Response` instanceを
+  返していた。2回目はJSON内容ではなく消費済みbodyで失敗し、曖昧なprovider結果として停止した。
+- **影響**：全件テスト148件中1件が一時不合格になった。実provider経路や成果物は変更していない。
+- **修正**：各fetch呼出しへ新しい`Response`を生成するfixtureへ直し、期待する壊れたJSON検査を復元した。
+- **再発防止**：複数回呼ばれるfetch mockは`mockImplementation`で呼出しごとに新しいbodyを返す。
+
+## 2026-08-26 G1回収処理の追加で画像rendererの行数上限を超えた
+
+- **何が起きたか**：画像生成と画像QAのcheckpoint処理を`image-renderer.ts`へ直接追加し、lintの
+  300行上限を339行で超えた。
+- **影響**：lintが1件不合格になり、コミット前に停止した。
+- **修正**：provider結果の保存・回収を`image-provider-recovery.ts`へ責務単位で分離した。
+- **再発防止**：provider状態機械は描画実装から独立させ、rendererはprovider呼出しと画像検証の組立てに限定する。
+
+## 2026-08-26 G1 timeout再送廃止後に到達不能な型分岐を残した
+
+- **何が起きたか**：結果不明timeoutをその場でterminalにする変更後も、関数末尾に旧`timeout`分岐を残し、
+  TypeScriptが到達不能な比較として検出した。
+- **影響**：全151テストとlintは合格したが、typecheckが1件不合格になった。
+- **修正**：到達不能な状態と末尾分岐を削除し、timeoutは発生箇所で曖昧計上後に明示終了する形へ統一した。
+- **再発防止**：再試行状態を減らす変更では、状態union、代入、末尾のerror mappingを同時に更新する。
+
+## 2026-08-26 G1 Preview確認前にSupabase CLIとDockerの利用可否を確認しなかった
+
+- **何が起きたか**：最初のSupabase CLI確認は未導入で失敗し、一時実行へ切り替えた後にCLI認証が
+  無いことが分かった。local migration検証用Docker daemonも起動していなかった。
+- **影響**：外部状態は変更しておらず、秘密値も表示していない。Preview migration適用とlocal DB検証は未実施。
+- **修正**：一時CLIではproject一覧の読取だけを試し、認証要求で停止した。Vercelは環境変数名だけを確認し、
+  Previewには`GEMINI_API_KEY`以外の必須設定が無いことを外部ブロッカーとしてhandoffへ記録した。
+- **再発防止**：Gate開始時の環境監査に、CLI存在、CLI認証、Docker daemon、Preview環境変数名の確認を含める。
+
+## 2026-08-26 G1 Previewをrepo rootから配備してWeb設定を適用できなかった
+
+- **何が起きたか**：手動Preview配備をrepo rootから実行し、`apps/web/vercel.json`ではなくproject側の
+  `public`出力設定でbuild後検査が失敗した。
+- **影響**：失敗したPreview deploymentが1件作られた。Productionと既存deploymentは変更されていない。
+- **修正**：`apps/web`を配備単位として明示して再実行し、実設定の検証へ進んだ。
+- **再発防止**：このmonorepoの手動Vercel配備は常に`--cwd apps/web`を指定し、root配備を使わない。
+
+## 2026-08-26 G1 dispatcher CronがVercel Hobbyの頻度制限で配備不能だった
+
+- **何が起きたか**：実配備設定へ統合した5分間隔dispatcher CronをVercelが拒否した。現在のaccountでは
+  Cronは1日1回までで、`*/5 * * * *`を含むPreviewを作れない。
+- **影響**：失敗したPreview deploymentが1件追加され、G1の実DB／Provider縦断へ進めない。
+  Productionと既存deploymentは変更されていない。
+- **修正状況**：`G1-CRON-002`として停止し、現行Cronを利用できるplanへ変更するか、Hobby上で即時dispatchと
+  有限時間retryを保証する構成へ実行計画を変更するか、利用者判断を待つ。
+- **再発防止**：配備設定をGate実装する前に、対象accountのplan制限を実deployで確認する。
+
+## 2026-08-26 監査補正の新schemaでAjv設定不整合を検出した
+
+- **何が起きたか**：新しいgoal schemaの`pattern`に型指定がなく、strict Ajvがcompileを拒否した。
+  また日時format plugin未導入のままstrict format検証を要求し、blind evidence validatorのテストが失敗した。
+- **影響**：ローカルの新規検証器だけが不合格になった。既存package、CI、外部証拠、秘密値への影響はない。
+- **修正**：`id`をstringとして明示し、日時はschemaの未登録formatに依存せず、validatorで実際にparse・順序比較する
+  方式へ統一した。
+- **再発防止**：Ajv schema追加時はstrict compileと正・負の実データ検証を同じ変更で実行する。

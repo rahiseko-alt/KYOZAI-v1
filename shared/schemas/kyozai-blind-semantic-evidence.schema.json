@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-blind-semantic-evidence.schema.json",
+  "title": "KYOZAI Blind Semantic Parity Evidence",
+  "type": "object",
+  "required": ["format", "evaluatedAt", "rubric", "candidateMapping", "mappingDisclosedAt", "fixtureResults"],
+  "properties": {
+    "format": { "const": "kyozai-blind-semantic-evidence@1.0.0" },
+    "evaluatedAt": { "type": "string", "format": "date-time" },
+    "mappingDisclosedAt": { "type": "string", "format": "date-time" },
+    "rubric": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": { "enum": ["source_fidelity", "learning_sequence", "speaker_script_usability", "visual_legibility", "delivery_completeness"] }
+    },
+    "candidateMapping": {
+      "type": "object",
+      "required": ["candidateA", "candidateB"],
+      "properties": {
+        "candidateA": { "enum": ["skill", "app"] },
+        "candidateB": { "enum": ["skill", "app"] }
+      },
+      "additionalProperties": false
+    },
+    "fixtureResults": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["fixtureId", "evaluators"],
+        "properties": {
+          "fixtureId": { "enum": ["direct_text", "long_pdf", "youtube_captioned", "reference_design", "natural_language_revision"] },
+          "evaluators": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "object",
+              "required": ["evaluatorAlias", "candidateA", "candidateB"],
+              "properties": {
+                "evaluatorAlias": { "type": "string", "minLength": 3 },
+                "candidateA": { "$ref": "#/$defs/candidateScore" },
+                "candidateB": { "$ref": "#/$defs/candidateScore" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "candidateScore": {
+      "type": "object",
+      "required": ["source_fidelity", "learning_sequence", "speaker_script_usability", "visual_legibility", "delivery_completeness", "severeSourceDeviationCount"],
+      "properties": {
+        "source_fidelity": { "type": "number", "minimum": 1, "maximum": 5 },
+        "learning_sequence": { "type": "number", "minimum": 1, "maximum": 5 },
+        "speaker_script_usability": { "type": "number", "minimum": 1, "maximum": 5 },
+        "visual_legibility": { "type": "number", "minimum": 1, "maximum": 5 },
+        "delivery_completeness": { "type": "number", "minimum": 1, "maximum": 5 },
+        "severeSourceDeviationCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
