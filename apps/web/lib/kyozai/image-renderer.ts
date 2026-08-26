@@ -6,6 +6,12 @@ import { PublicHttpError } from "./http-errors";
 
 import { buildSlideImagePrompt } from "./image-prompt";
 import { IMAGE_MODELS, type ImageModelId } from "./image-models";
+import {
+  runTrackedImageGeneration,
+  runTrackedImageQa,
+  type RecoverableSourceImage as SourceImage,
+  type RecoverableVisualReview as VisualReview,
+} from "./image-provider-recovery";
 import type { RenderedSlideImage } from "./image-types";
 import type { Slide, TeachingPackage } from "./types";
 
@@ -21,11 +27,6 @@ const RENDER_ROUTE_BUDGET_MS = 225_000;
 const IMAGE_GENERATION_TIMEOUT_MS = 150_000;
 const IMAGE_QA_TIMEOUT_MS = 60_000;
 const DEADLINE_BUFFER_MS = 5_000;
-const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-type VisualReview = { passed: boolean; issues: string[]; checks: string[] };
-type SourceImage = { bytes: Buffer; format: "jpeg" | "png"; providerModel: string; providerQuality: "1K" | "medium" };
-
 function hash(value: string | Buffer) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -41,18 +42,9 @@ function timeoutBefore(deadlineMs: number, preferredMs: number, reserveMs = DEAD
   return timeoutMs;
 }
 
-async function providerFetch(url: string, init: RequestInit, operation: string, timeoutMs: number, retryRateLimit = false) {
+async function providerFetch(url: string, init: RequestInit, operation: string, timeoutMs: number) {
   try {
     const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-    if (response.status === 429 && retryRateLimit && timeoutMs > 12_000) {
-      const retryAfterSeconds = Number(response.headers.get("retry-after"));
-      const delayMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? Math.min(retryAfterSeconds * 1000, 10_000) : 3_000;
-      await wait(delayMs);
-      const retry = await fetch(url, { ...init, signal: AbortSignal.timeout(Math.max(5_000, timeoutMs - delayMs - 1_000)) });
-      if (retry.ok) return retry;
-      if (retry.status === 429) throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", `${operation}が混雑しています。少し時間を置いてから再実行してください。`, 60);
-      throw new PublicHttpError(502, "UPSTREAM_FAILURE", `${operation}が応答を完了できませんでした。`);
-    }
     if (!response.ok) throw new PublicHttpError(response.status === 429 ? 503 : 502, response.status === 429 ? "SERVICE_UNAVAILABLE" : "UPSTREAM_FAILURE", response.status === 429 ? `${operation}が混雑しています。少し時間を置いてから再実行してください。` : `${operation}が応答を完了できませんでした。`, response.status === 429 ? 60 : undefined);
     return response;
   } catch (error) {
@@ -100,7 +92,7 @@ async function generateGemini(modelId: Extract<ImageModelId, `gemini-${string}`>
       input: [{ type: "text", text: prompt }],
       response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: "16:9", image_size: "1K" },
     }),
-  }, "Gemini画像生成", timeoutMs, true);
+  }, "Gemini画像生成", timeoutMs);
   const payload = await response.json() as { status?: string; output_image?: unknown; steps?: unknown };
   if (payload.status && payload.status !== "completed") throw new Error("Gemini画像生成が完了状態を返しませんでした。");
   const blocks = geminiImageBlocks(payload);
@@ -125,7 +117,7 @@ async function generateOpenAi(prompt: string, timeoutMs: number) {
       output_format: "png",
       background: "opaque",
     }),
-  }, "OpenAI画像生成", timeoutMs, true);
+  }, "OpenAI画像生成", timeoutMs);
   const payload = await response.json() as { data?: Array<{ b64_json?: string }> };
   if (payload.data?.length !== 1) throw new Error("OpenAI画像生成の出力が1枚ではありませんでした。");
   const bytes = decodeBase64(payload.data[0]?.b64_json);
@@ -209,7 +201,7 @@ async function visualReview(image: Buffer, slide: Slide, timeoutMs: number): Pro
       },
       max_output_tokens: 1200,
     }),
-  }, "画像QA", timeoutMs, true);
+  }, "画像QA", timeoutMs);
   const payload = await response.json() as { status?: string; output?: unknown[]; error?: { message?: string } };
   if (payload.status !== "completed") throw new Error("画像QAが完了状態を返しませんでした。");
   const text = outputText(payload);
@@ -228,7 +220,8 @@ export async function renderValidatedSlide(result: TeachingPackage, slide: Slide
   let retryIssues: string[] = [];
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const prompt = buildSlideImagePrompt(result, slide, retryIssues);
-    const source = await generateImage(modelId, prompt, timeoutBefore(deadlineMs, IMAGE_GENERATION_TIMEOUT_MS, IMAGE_QA_TIMEOUT_MS + DEADLINE_BUFFER_MS));
+    const source = await runTrackedImageGeneration(modelId, slide.number, attempt,
+      () => generateImage(modelId, prompt, timeoutBefore(deadlineMs, IMAGE_GENERATION_TIMEOUT_MS, IMAGE_QA_TIMEOUT_MS + DEADLINE_BUFFER_MS)));
     let normalized: Buffer;
     try {
       normalized = await normalizeAndInspect(source);
@@ -239,7 +232,8 @@ export async function renderValidatedSlide(result: TeachingPackage, slide: Slide
       }
       throw error;
     }
-    const review = await visualReview(normalized, slide, timeoutBefore(deadlineMs, IMAGE_QA_TIMEOUT_MS));
+    const review = await runTrackedImageQa(QA_MODEL, slide.number, attempt,
+      () => visualReview(normalized, slide, timeoutBefore(deadlineMs, IMAGE_QA_TIMEOUT_MS)));
     if (!review.passed) {
       retryIssues = review.issues.length ? review.issues : ["表示文字とレイアウトを再確認する"];
       if (attempt === 1 && deadlineMs - Date.now() > IMAGE_QA_TIMEOUT_MS + DEADLINE_BUFFER_MS) continue;

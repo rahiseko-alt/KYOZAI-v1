@@ -22,10 +22,12 @@ async function main() {
   let pendingSeen = false;
   for (const gate of contract.gates) {
     if (!Array.isArray(gate.acceptanceEvidence) || gate.acceptanceEvidence.length === 0
-      || !Array.isArray(gate.gaps) || gate.gaps.length === 0 || !String(gate.goalContribution ?? "").trim()) {
+      || !Array.isArray(gate.gaps) || !String(gate.goalContribution ?? "").trim()) {
       throw new Error(`${gate.id}: contribution, gaps and acceptance evidence are required`);
     }
     if (!['pending', 'in_progress', 'completed'].includes(gate.status)) throw new Error(`${gate.id}: invalid status`);
+    if (gate.status === "completed" && gate.gaps.length !== 0) throw new Error(`${gate.id}: completed Gate cannot retain unresolved gaps`);
+    if (gate.status !== "completed" && gate.gaps.length === 0) throw new Error(`${gate.id}: incomplete Gate requires at least one gap`);
     if (gate.status === "in_progress") activeCount += 1;
     if (gate.status === "pending") pendingSeen = true;
     if (pendingSeen && gate.status !== "pending") throw new Error(`${gate.id}: a later Gate cannot start before the preceding Gate completes`);

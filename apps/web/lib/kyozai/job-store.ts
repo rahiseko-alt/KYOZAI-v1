@@ -145,7 +145,8 @@ export async function createJob(user: AuthenticatedJobUser, raw: CreateJobReques
     p_attachment_ids: request.attachmentIds ?? [],
     p_workflow_version: "kyozai-workflow@1",
     p_reserved_image_calls: 24,
-    p_reserved_cost_units: 24,
+    // 24 image generations + 24 image QA calls + up to 9 structured-text calls.
+    p_reserved_cost_units: 57,
   });
   if (error || !data) {
     if (error?.code === "23505") throw conflict("このIdempotency-Keyは別の入力に使用されています。");

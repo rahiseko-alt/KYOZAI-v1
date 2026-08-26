@@ -149,22 +149,17 @@ describe("画像生成工程", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("画像生成APIの429は短く待って1回だけ再試行する", async () => {
+  it("画像生成APIの429を台帳外で自動再送しない", async () => {
     vi.stubEnv("GEMINI_API_KEY", "test-key");
     vi.stubEnv("OPENAI_API_KEY", "test-key");
-    const jpeg = await fixtureImage(1024, 576, "jpeg");
     const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "rate limited" }), { status: 429, headers: { "retry-after": "0" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        output_image: { mime_type: "image/jpeg", data: jpeg.toString("base64") },
-      }), { status: 200, headers: { "Content-Type": "application/json" } }))
-      .mockResolvedValueOnce(qaResponse(true));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "rate limited" }), { status: 429, headers: { "retry-after": "0" } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const image = await renderValidatedSlide(mockPackage, mockPackage.slides[0]!, "gemini-3.1-flash-lite-image");
+    await expect(renderValidatedSlide(mockPackage, mockPackage.slides[0]!, "gemini-3.1-flash-lite-image"))
+      .rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
 
-    expect(image).toMatchObject({ providerModel: "gemini-3.1-flash-lite-image" });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("画像QAは単独の番号バッジをDATA外文字として扱わない", async () => {
