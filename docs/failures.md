@@ -1600,3 +1600,21 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **修正**：一時CLIではproject一覧の読取だけを試し、認証要求で停止した。Vercelは環境変数名だけを確認し、
   Previewには`GEMINI_API_KEY`以外の必須設定が無いことを外部ブロッカーとしてhandoffへ記録した。
 - **再発防止**：Gate開始時の環境監査に、CLI存在、CLI認証、Docker daemon、Preview環境変数名の確認を含める。
+
+## 2026-08-26 G1 Previewをrepo rootから配備してWeb設定を適用できなかった
+
+- **何が起きたか**：手動Preview配備をrepo rootから実行し、`apps/web/vercel.json`ではなくproject側の
+  `public`出力設定でbuild後検査が失敗した。
+- **影響**：失敗したPreview deploymentが1件作られた。Productionと既存deploymentは変更されていない。
+- **修正**：`apps/web`を配備単位として明示して再実行し、実設定の検証へ進んだ。
+- **再発防止**：このmonorepoの手動Vercel配備は常に`--cwd apps/web`を指定し、root配備を使わない。
+
+## 2026-08-26 G1 dispatcher CronがVercel Hobbyの頻度制限で配備不能だった
+
+- **何が起きたか**：実配備設定へ統合した5分間隔dispatcher CronをVercelが拒否した。現在のaccountでは
+  Cronは1日1回までで、`*/5 * * * *`を含むPreviewを作れない。
+- **影響**：失敗したPreview deploymentが1件追加され、G1の実DB／Provider縦断へ進めない。
+  Productionと既存deploymentは変更されていない。
+- **修正状況**：`G1-CRON-002`として停止し、現行Cronを利用できるplanへ変更するか、Hobby上で即時dispatchと
+  有限時間retryを保証する構成へ実行計画を変更するか、利用者判断を待つ。
+- **再発防止**：配備設定をGate実装する前に、対象accountのplan制限を実deployで確認する。
