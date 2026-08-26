@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-real-package-evidence.schema.json",
+  "title": "KYOZAI Real Package Provenance Evidence",
+  "type": "object",
+  "required": ["format", "fixtureId", "producer", "packageDigest", "validatedAt", "validator", "commitSha", "ciRunUrl", "attestationUrl", "contentIncluded"],
+  "properties": {
+    "format": { "const": "kyozai-real-package-evidence@1.0.0" },
+    "fixtureId": { "type": "string", "minLength": 1 },
+    "producer": { "enum": ["skill", "app"] },
+    "packageDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "validatedAt": { "type": "string", "format": "date-time" },
+    "validator": { "const": "scripts/validate-blind-parity.mjs" },
+    "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "ciRunUrl": { "type": "string", "pattern": "^https://github\\.com/.+/actions/runs/[0-9]+$" },
+    "attestationUrl": { "type": "string", "pattern": "^https://github\\.com/.+/attestations/.+$" },
+    "contentIncluded": { "const": false }
+  },
+  "additionalProperties": false
+}

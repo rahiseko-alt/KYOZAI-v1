@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
+import { e2eEphemeralSecret } from "./e2e-runtime";
 import type { ImageModelId } from "./image-models";
 import { PublicHttpError, badRequest } from "./http-errors";
 import type { TeachingPackage } from "./types";
@@ -20,8 +21,6 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-const E2E_RENDER_GRANT_SECRET = "kyozai-e2e-render-grant-secret-32-bytes-minimum";
-
 function validateSecret(value: string | undefined) {
   if (!value || Buffer.byteLength(value, "utf8") < 32) {
     throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "画像生成の署名設定が不正です。管理者へお問い合わせください。");
@@ -30,7 +29,8 @@ function validateSecret(value: string | undefined) {
 }
 
 function currentSecret() {
-  if (process.env.KYOZAI_E2E_MODE === "1" && process.env.VERCEL_ENV !== "production") return E2E_RENDER_GRANT_SECRET;
+  const e2eSecret = e2eEphemeralSecret();
+  if (e2eSecret) return e2eSecret;
   if (process.env.KYOZAI_RENDER_GRANT_SECRET) return validateSecret(process.env.KYOZAI_RENDER_GRANT_SECRET);
   throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "画像生成の署名設定がありません。管理者へお問い合わせください。");
 }

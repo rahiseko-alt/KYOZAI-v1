@@ -41,8 +41,8 @@ jobs:
       - name: Validate Skill process contract
         run: pnpm validate:process
 
-      - name: Validate blind parity measurement
-        run: pnpm validate:blind-parity
+      - name: Validate parity validator contracts
+        run: pnpm validate:blind-parity && pnpm validate:blind-semantic && pnpm validate:real-package-evidence
 
       - name: Typecheck
         run: pnpm -r typecheck

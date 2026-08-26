@@ -14,7 +14,7 @@
 
 ## 復帰先
 
-- provider checkpoint、キャンセルsweeper、配備Cronのローカル実装と156テストは合格済み。
+- provider checkpoint、キャンセルsweeper、配備Cronのローカル実装、監査補正、158テストは合格済み。
 - `G1-CRON-002`の終了条件: 現行頻度を許容するVercel plan、またはHobbyでも即時dispatchと有限時間retryを
   保証する計画変更のどちらかを利用者が選ぶ。
 - 終了後はdisposable Previewでmigration適用と実縦断へ戻る。

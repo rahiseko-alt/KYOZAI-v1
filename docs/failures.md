@@ -1618,3 +1618,12 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **修正状況**：`G1-CRON-002`として停止し、現行Cronを利用できるplanへ変更するか、Hobby上で即時dispatchと
   有限時間retryを保証する構成へ実行計画を変更するか、利用者判断を待つ。
 - **再発防止**：配備設定をGate実装する前に、対象accountのplan制限を実deployで確認する。
+
+## 2026-08-26 監査補正の新schemaでAjv設定不整合を検出した
+
+- **何が起きたか**：新しいgoal schemaの`pattern`に型指定がなく、strict Ajvがcompileを拒否した。
+  また日時format plugin未導入のままstrict format検証を要求し、blind evidence validatorのテストが失敗した。
+- **影響**：ローカルの新規検証器だけが不合格になった。既存package、CI、外部証拠、秘密値への影響はない。
+- **修正**：`id`をstringとして明示し、日時はschemaの未登録formatに依存せず、validatorで実際にparse・順序比較する
+  方式へ統一した。
+- **再発防止**：Ajv schema追加時はstrict compileと正・負の実データ検証を同じ変更で実行する。

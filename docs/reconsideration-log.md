@@ -104,3 +104,13 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 再審議時の候補対応: G4で最初にjob所有者を同一query/RPCで確定し、その後だけbase revisionとartifactを読む。
   不一致と不存在の外部応答を同一化する。
 - 状態: goal_after_review
+
+## 2026-08-26 監査補正の実施記録
+
+- 対象: R-20260826-02、R-20260826-03、R-20260826-04、R-20260826-05、R-20260826-06。
+- 判断: `G1-CRON-002`とは独立して、利用者が「それ以外を直せ」と明示したため、G1の安全性と
+  G6証拠正当性へ直接寄与する最小範囲を補正する。
+- 実施範囲: ProductionのE2E runtime禁止、process内一時E2E secret、revision所有者先行確認、
+  blind semantic evidence／実package provenance evidenceのschemaと検証器。
+- 非実施範囲: 実Provider packageのattestation生成、G2以降の機能実装、Cron構成変更。
+- 状態: implemented_under_explicit_exception

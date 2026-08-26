@@ -20,6 +20,7 @@ import { mockPackage } from "./mock";
 import type { SourceInput, TeachingAnalysis, TeachingPackage } from "./types";
 import type { ScriptStage, SlideMap } from "./content-pipeline";
 import type { DurableContentStage } from "./durable-stages";
+import { isE2eRuntimeAllowed } from "./e2e-runtime";
 import { injectG1Fault } from "./g1-fault-injection";
 import { withProviderAttemptContext } from "./provider-attempt";
 
@@ -142,7 +143,7 @@ export async function loadOrCreatePackage(jobId: string, revisionId: string, req
     throw new Error(`${stage}_stage_busy`);
   }
 
-  const fixture = process.env.KYOZAI_E2E_MODE === "1" ? structuredClone(mockPackage) : undefined;
+  const fixture = isE2eRuntimeAllowed() ? structuredClone(mockPackage) : undefined;
   const analysis = await stageValue<TeachingAnalysis>("analysis", "source_info", async () => fixture?.process!.analysis ?? generateTeachingAnalysis(sources!, requestText)); if (stopAfter === "analysis") return undefined;
   const map = await stageValue<SlideMap>("slide_map", "deck_content_and_script", async () => fixture
     ? { title: fixture.title, sourceSummary: fixture.sourceSummary, learningObjectives: fixture.learningObjectives, slides: fixture.slides.map((slide) => ({ number: slide.number, layoutFamily: slide.layoutFamily, labels: slide.labels, theme: slide.theme, role: slide.role, title: slide.title, keyMessage: slide.keyMessage, bullets: slide.bullets, composition: slide.composition ?? `slide ${slide.number}の表示要素を内容に沿って配置する` })) }
@@ -200,7 +201,7 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
     } else {
       let created: (RenderedSlideImage & { bytes: Buffer; artifactId: string }) | undefined;
       const outputIds = await withStage(jobId, revisionId, "image_generate", slide.number, async () => {
-        const rendered = process.env.KYOZAI_E2E_MODE === "1" ? await mockRenderedSlide(teachingPackage, slide, modelId) : await renderValidatedSlide(teachingPackage, slide, modelId, Date.now() + 14 * 60_000);
+        const rendered = isE2eRuntimeAllowed() ? await mockRenderedSlide(teachingPackage, slide, modelId) : await renderValidatedSlide(teachingPackage, slide, modelId, Date.now() + 14 * 60_000);
         const bytes = Buffer.from(rendered.data, "base64");
         const artifact = await storeArtifact(jobId, revisionId, "slide_image", `slide-${String(slide.number).padStart(2, "0")}.png`, bytes, "image/png", slide.number);
         created = { ...rendered, bytes, artifactId: artifact.id };

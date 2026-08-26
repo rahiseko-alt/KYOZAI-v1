@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-parity-goal.schema.json",
+  "title": "KYOZAI Skill and APP Parity Goal",
+  "type": "object",
+  "required": ["id", "version", "canonicalPlan", "status", "activeGate", "productionGeneration", "fixtures", "gates", "outOfScopeUntilGoal"],
+  "properties": {
+    "id": { "const": "kyozai-skill-app-parity" },
+    "version": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "canonicalPlan": { "const": "docs/skill-app-parity-execution-plan-2026-08-26.md" },
+    "status": { "enum": ["in_progress", "completed"] },
+    "activeGate": { "type": ["string", "null"], "pattern": "^G[0-6]$" },
+    "productionGeneration": { "enum": ["locked_404", "authenticated_enabled"] },
+    "fixtures": { "type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "gates": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "goalContribution", "acceptanceEvidence", "gaps"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^G[0-6]$" },
+          "status": { "enum": ["pending", "in_progress", "completed"] },
+          "goalContribution": { "type": "string", "minLength": 1 },
+          "acceptanceEvidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "gaps": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "evidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "outOfScopeUntilGoal": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "additionalProperties": false
+}

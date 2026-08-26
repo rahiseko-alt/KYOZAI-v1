@@ -7,6 +7,9 @@ const root = process.cwd();
 
 async function main() {
   const contract = JSON.parse(await readFile(path.join(root, "shared/kyozai-parity-goal.json"), "utf8"));
+  const goalSchema = JSON.parse(await readFile(path.join(root, "shared/schemas/kyozai-parity-goal.schema.json"), "utf8"));
+  const goalValidator = new Ajv2020({ allErrors: true, strict: true, validateFormats: false }).compile(goalSchema);
+  if (!goalValidator(contract)) throw new Error(`Parity goal schema is invalid: ${JSON.stringify(goalValidator.errors)}`);
   const expectedGates = ["G0", "G1", "G2", "G3", "G4", "G5", "G6"];
   const expectedFixtures = ["direct_text", "long_pdf", "youtube_captioned", "reference_design", "natural_language_revision"];
   if (contract.id !== "kyozai-skill-app-parity" || !["in_progress", "completed"].includes(contract.status)) throw new Error("Parity goal status is invalid");
@@ -40,7 +43,7 @@ async function main() {
   if (contract.status === "completed" && (activeCount !== 0 || contract.gates.some((gate) => gate.status !== "completed"))) {
     throw new Error("Every Gate must be completed before the goal can complete");
   }
-  const schemaFiles = ["kyozai-deck-spec.schema.json", "kyozai-stage-ledger.schema.json", "kyozai-package-manifest.schema.json"];
+  const schemaFiles = ["kyozai-deck-spec.schema.json", "kyozai-stage-ledger.schema.json", "kyozai-package-manifest.schema.json", "kyozai-blind-semantic-evidence.schema.json", "kyozai-real-package-evidence.schema.json"];
   const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
   for (const filename of schemaFiles) {
     ajv.compile(JSON.parse(await readFile(path.join(root, "shared", "schemas", filename), "utf8")));
