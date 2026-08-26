@@ -29,14 +29,10 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 | YouTubeを一般HTMLとして取得 | 専用extractorでメタデータ・字幕を取得 | G3 |
 | 参考画像を入力不能 | 独立design profileと原本hashを保存 | G3 |
 | revision candidateが実行されない | revision単位dispatchと検証昇格 | G4 |
-| revision元を所有者確認前にservice roleで読む | 所有者を最初に確定してから原artifactを読む | G4 |
 | 期限切れ・未使用uploadを削除しない | 自動期限切れ・物理削除 | G5 |
 | 再開時にartifactを再検証しない | 利用直前にbyte数・SHA-256を検証 | G5 |
 | 待ち時間・原価・削除失敗を測定しない | queue、stage、費用、削除SLOを監視 | G5 |
-| Preview E2E固定値が外部のDeployment Protectionを前提にする | Preview test credentialを公開固定値へ依存させない | G5 |
-| durable jobのE2E mockがProduction環境を二重確認しない | Productionでは設定残存時もmockを実行不能にする | G6 |
 | packageの由来と`real`申告を自己整合性だけで判定する | 外部attestationと再検証可能な非案件metadataで由来を証明 | G6 |
-| pair validatorが教材内容の同等性を採点しない | 匿名blind評価の主体、rubric、件数、証拠形式を固定 | G6 |
 
 ## Gate
 
@@ -59,6 +55,9 @@ PRはGateごとに1本とし、合格前に次Gateへ進まない。
 Production E2E mock遮断、Preview E2E固定値の撤廃、revision所有者先行確認、由来・blind証拠契約の
 不足だけを同じG1 PR内で補正する。この例外はG2以降の機能実装やGateの前倒しを許可しない。
 各補正は、G1の安全な実縦断とG6の証拠正当性を直接守る回帰テストまたは機械検証を合格証拠とする。
+この補正で解決済みとなったG4所有者先行確認、G5 Preview E2E固定値、G6 Production E2E mock遮断、
+G6 blind semantic rubricは`shared/kyozai-parity-goal.json`の未解決gapから除外した。外部attestationを伴う
+実package由来は未取得のため、G6 gapとして残す。
 
 ## 計画外問題
 
