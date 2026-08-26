@@ -26,7 +26,12 @@
 ## 外部証拠と次の一手
 
 - G0の実fixture条件はローカル合格済み。
-- commit SHAとCI run URLは未取得。G0の全ローカル検証後にG0差分だけをコミットし、PRを作成する。
+- commit: `47918e9`
+- PR: `https://github.com/rahiseko-alt/KYOZAI-v1/pull/24`
+- CI: `https://github.com/rahiseko-alt/KYOZAI-v1/actions/runs/32916571108`
+- 品質、build、smoke、E2E、CodeQL、集約`ci-green`は全件合格。
+- CodeRabbitはリポジトリ条件によりレビューを提供しなかった。手動要求済みで、
+  `R-20260826-01`へ再審議事項として記録した。
 - CI合格とG0 PR完了まではG1へ着手しない。
 - G1ではdisposable Preview SupabaseとPreview用の必須環境変数が必要。秘密値は運用者が
   エージェントを経由せず直接登録する。

@@ -20,3 +20,17 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 ## 再審議待ち
 
 なし。
+
+## R-20260826-01 CodeRabbitがリポジトリ条件によりレビューを提供しない
+
+- 発見日: 2026-08-26
+- 発見Gate: G0
+- 症状: PR #24のCodeRabbit checkが、リポジトリのstar数条件によりreview skippedとなった。
+  `@coderabbitai review`を手動投稿してもレビューは開始されなかった。
+- 再現方法: PR #24のCodeRabbit checkとbotコメントを確認する。
+- 放置可能な根拠: G0の実package通常モード検証、致命的negative 10件、品質、build、smoke、E2E、
+  CodeQL、集約`ci-green`は合格し、PRのmerge stateは`CLEAN`である。秘密情報、所有者分離、
+  費用上限、データ消失、証拠の正当性を変更しない。
+- 想定影響: CodeRabbitによる定性的な自動レビュー結果はG0証拠に含まれない。
+- 再審議時の候補対応: CodeRabbitのOSS設定、review trigger条件、別の必須review経路を確認する。
+- 状態: goal_after_review
