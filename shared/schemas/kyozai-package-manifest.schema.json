@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kyozai.local/schemas/kyozai-package-manifest.schema.json",
+  "title": "KYOZAI Package Manifest",
+  "type": "object",
+  "required": ["format", "producer", "evidenceMode", "fixtureId", "processContract", "designProfile", "sourceHash", "contentFreezePassed", "generatedSlideCount", "files"],
+  "properties": {
+    "format": { "const": "kyozai-package@2.0.0" },
+    "producer": { "enum": ["skill", "app"] },
+    "evidenceMode": { "enum": ["real", "contract_test"] },
+    "fixtureId": { "type": "string", "minLength": 1 },
+    "processContract": { "const": "kyozai-slide-process@1.0.0" },
+    "designProfile": { "const": "kyozai-standard@1.0.0" },
+    "sourceHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "contentFreezePassed": { "const": true },
+    "generatedSlideCount": { "type": "integer", "minimum": 4, "maximum": 12 },
+    "files": {
+      "type": "array",
+      "minItems": 11,
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "mediaType", "byteSize", "sha256"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "mediaType": { "type": "string", "minLength": 1 },
+          "byteSize": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "slideNumber": { "type": "integer", "minimum": 1, "maximum": 12 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -13,7 +13,7 @@
     "totalDurationSeconds": { "type": "integer", "minimum": 0 },
     "slides": {
       "type": "array",
-      "minItems": 3,
+      "minItems": 4,
       "maxItems": 12,
       "items": {
         "type": "object",

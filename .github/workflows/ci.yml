@@ -35,6 +35,15 @@ jobs:
       - name: Validate Codex skills
         run: pnpm validate:skills
 
+      - name: Validate active parity goal
+        run: pnpm validate:goal
+
+      - name: Validate Skill process contract
+        run: pnpm validate:process
+
+      - name: Validate blind parity measurement
+        run: pnpm validate:blind-parity
+
       - name: Typecheck
         run: pnpm -r typecheck
 
