@@ -23,7 +23,7 @@
 
 ## 外部ブロッカー
 
-- disposable Preview Supabaseが未接続で、migration、private bucket、RLSの実適用証拠がない。
-- Previewには必須環境変数が揃っていない。秘密値は運用者がエージェントを経由せず直接登録する。
+- disposable Preview Supabaseはこの端末で未ログインのため、project作成／選択、migration、private bucket、RLSの実適用証拠がない。運用者がSupabaseへログイン後に再開する。
+- Vercel Previewで確認できた必須設定は`GEMINI_API_KEY`だけだった。`apps/web/.env.example`と`docs/zero-cost-scheduler-setup.md`にある残りの値は、運用者がエージェントを経由せず直接登録する。
 - Vercel Hobbyは5分間隔Cronを拒否する。Vercel Cronを無料Supabase schedulerへ移す実装と実証が未完了。
 - 上記が揃うまでPreview実Provider完走、usage突合、物理artifact hash一致は判定できない。

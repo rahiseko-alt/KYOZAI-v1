@@ -1652,3 +1652,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **正しくは**：その後に起動中processが無く、lockも存在しないことを読取で確認した。理由はプロセスが自然終了したためであり、
   エージェントが停止・削除したためではない。
 - **影響**：記録の訂正のみ。実装、外部環境、秘密値への影響はない。
+
+## 2026-08-27 Browser Skillの旧cache pathを最初に参照した
+
+- **何が起きたか**：Browser Skillの案内にあるcache pathのversionが現在のinstalled versionと一致せず、最初の読取が失敗した。
+- **影響**：読取専用の失敗だけで、ブラウザ操作、外部設定、秘密値への影響はない。
+- **修正**：installed plugin cacheから現在のversionの`SKILL.md`を特定して読み直した。
+- **再発防止**：plugin cacheを参照する前に、実在するversion directoryを確認する。
