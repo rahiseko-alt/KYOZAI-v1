@@ -1627,3 +1627,28 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **修正**：`id`をstringとして明示し、日時はschemaの未登録formatに依存せず、validatorで実際にparse・順序比較する
   方式へ統一した。
 - **再発防止**：Ajv schema追加時はstrict compileと正・負の実データ検証を同じ変更で実行する。
+
+## 2026-08-27 0円scheduler実装の調査で存在しない対象を読んだ
+
+- **何が起きたか**：最初の検索で存在しない`tests` directoryを指定し、続く読取で誤ったmigration名と
+  PowerShellの角括弧pathをそのまま渡したため、対象を取得できなかった。
+- **影響**：読取専用コマンドだけが失敗した。ファイル変更、外部設定、秘密値、実行状態への影響はない。
+- **修正**：実在する`apps/web/tests`とmigration一覧を基準に読み直し、Next.jsのdynamic routeはliteral pathとして扱う。
+- **再発防止**：検索・読取の前に`rg --files`で対象名を確認し、PowerShellではdynamic route pathを`-LiteralPath`で読む。
+
+## 2026-08-27 scheduler変更の検証でNext buildを並列起動した
+
+- **何が起きたか**：先行`next build`の完了前に、buildを含む別の検証を並列に開始した。後続buildは`.next/lock`を
+  検出して停止した。
+- **影響**：後続のローカルbuildだけが不合格になった。実装、外部配備、秘密値、CIへの影響はない。
+- **修正**：起動中のbuildが無いことをprocess command lineで確認し、検証用serverを停止してstale lockを除去した後、
+  build、smoke、E2Eを直列で再実行する。
+- **再発防止**：Next.jsのbuild、smoke、E2Eは同じ`.next`を使うため、これらを並列に起動しない。
+
+## 2026-08-27 build lockの停止方法に関する訂正
+
+- **訂正対象**：直前の「scheduler変更の検証でNext buildを並列起動した」の修正記述。
+- **誤り**：検証用serverを停止してlockを除去したと記録したが、停止・削除コマンドは実行環境の安全制約で拒否された。
+- **正しくは**：その後に起動中processが無く、lockも存在しないことを読取で確認した。理由はプロセスが自然終了したためであり、
+  エージェントが停止・削除したためではない。
+- **影響**：記録の訂正のみ。実装、外部環境、秘密値への影響はない。

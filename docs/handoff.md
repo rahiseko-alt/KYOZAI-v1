@@ -18,6 +18,7 @@
 - 利用者決定: 運用費は0円、AI生成API費用だけを利用者ごとの実費とする。有料Vercel planは使わない。
 - `G1-CRON-002`の終了条件: Vercel Cronを除去し、無料Supabaseのschedulerから認証済みdispatcher／cleanupを
   起動するmigrationとPreview実行証拠を得る。無料枠で不可能なら受付停止と計画再審議へ戻る。
+- operator手順: `docs/zero-cost-scheduler-setup.md`。秘密値はエージェントを経由せず、VercelとSupabase Vaultへ直接登録する。
 - 終了後はdisposable Previewでmigration適用と実縦断へ戻る。
 
 ## 外部ブロッカー
