@@ -1673,3 +1673,23 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：候補値はコピー・保存・環境変数への登録をしておらず、運用の秘密情報ではない。露出経路は調査ツール出力のみである。
 - **修正**：候補値を再表示・引用せず、外部生成サイトを使わないローカル生成手段へ調査方針を切り替えた。
 - **再発防止**：秘密値を扱う調査では、値を含むページ本文を取得せず、公式ドキュメントや仕様ページだけを根拠にする。
+
+## 2026-08-27 Vercelの環境選択を画面確認前に案内した
+
+- **何が起きたか**：Git未接続projectのbranch限定環境変数を、実際のVercel UIで保存できることを確認する前に案内した。
+  UIは保存を拒否し、既存の`CRON_SECRET`がProductionだけへ保存されていることも後から確認した。
+- **影響**：Productionでprovider呼出しは行われず、秘密値の表示・共有もない。誤ったProduction設定は利用者が削除し、
+  新しいSecretをPreviewだけへ登録した。
+- **修正**：新規追加ではなく既存Secretの編集画面を実際に確認し、環境一覧の`Preview`だけを選ぶ手順へ訂正した。
+- **再発防止**：外部UIの設定手順は、公式仕様に加えて同じaccountの入力画面で保存前の選択肢・警告・保存可否を確認してから、
+  1ステップずつ案内する。
+
+## 2026-08-27 Vercelのmonorepo配備境界を誤ってroot配備へ切り替えた
+
+- **何が起きたか**：`apps/web`だけのCLI配備が`shared/`契約を含めず失敗したため、root packageをNext.js projectとして
+  配備する設定へ一時的に切り替えた。root packageにはNext.js dependencyが無く、Vercel buildはframework検出で停止した。
+- **影響**：Preview deploymentが2件不合格になった。Production、provider呼出し、秘密値の表示・共有には影響がない。
+- **修正**：root配備用の設定を戻した。Vercel公式のmonorepo方式どおり、`apps/web`をRoot Directoryに保ち、
+  親`shared/`をBuild対象へ含めるproject設定を確認してから再配備する。
+- **再発防止**：monorepoの外部importは、framework検出だけでrootへ移さず、Root Directoryとsource-inclusionの
+  platform設定を公式仕様で先に確認する。
