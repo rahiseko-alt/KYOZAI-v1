@@ -19,11 +19,14 @@
 - `G1-CRON-002`の終了条件: Vercel Cronを除去し、無料Supabaseのschedulerから認証済みdispatcher／cleanupを
   起動するmigrationとPreview実行証拠を得る。無料枠で不可能なら受付停止と計画再審議へ戻る。
 - operator手順: `docs/zero-cost-scheduler-setup.md`。秘密値はエージェントを経由せず、VercelとSupabase Vaultへ直接登録する。
+- Vercel Preview: `https://kyozai-v1-ar1n8apgq-rahisekos-projects.vercel.app`（deployment `dpl_DMMeTdR3A7YPFE1r2t6xkKFwBAdX`）が
+  Ready。Root Directory=`apps/web`、親sourceをBuildへ含める設定を確認済み。
 - 終了後はdisposable Previewでmigration適用と実縦断へ戻る。
 
 ## 外部ブロッカー
 
-- disposable Preview Supabaseはこの端末で未ログインのため、project作成／選択、migration、private bucket、RLSの実適用証拠がない。運用者がSupabaseへログイン後に再開する。
-- Vercel Previewで確認できた必須設定は`GEMINI_API_KEY`だけだった。`apps/web/.env.example`と`docs/zero-cost-scheduler-setup.md`にある残りの値は、運用者がエージェントを経由せず直接登録する。
-- Vercel Hobbyは5分間隔Cronを拒否する。Vercel Cronを無料Supabase schedulerへ移す実装と実証が未完了。
+- disposable Preview Supabaseはログイン済みだが、既存3 projectのうちKYOZAI用に使うprojectが未指定で、migration、private bucket、RLSの実適用証拠がない。
+- Vercel Previewで登録済みの必須Secretは`CRON_SECRET`と`GEMINI_API_KEY`だけ。残る変数は`apps/web/.env.example`と
+  `docs/zero-cost-scheduler-setup.md`に従い、運用者がエージェントを経由せず直接登録する。
+- Vercel Hobbyは5分間隔Cronを拒否する。無料Supabase scheduler migrationは未適用で、実証も未完了。
 - 上記が揃うまでPreview実Provider完走、usage突合、物理artifact hash一致は判定できない。
