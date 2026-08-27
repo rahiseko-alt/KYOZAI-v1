@@ -4,29 +4,22 @@
 
 ## 現在のGate
 
-- `【寄り道中 1/1｜G1-CRON-002｜復帰先Gate G1】`
 - Gate: G1（直接入力の実縦断）
 - ブランチ: `codex/g1-resume`
 - 親Gate: G1
-- ゴールへの寄与: 直接入力を実DB・Storage・Workflow・Providerで完走させ、停止後も
-  二重課金なく完了またはterminal状態へ到達させる。
+- ゴールへの寄与: Cloudflare上の実DB、private artifact、定期実行、認証境界を通して、
+  直接入力を実Providerで完走させる。
 - 合格証拠: Preview実Provider完走、故障注入行列、provider usage突合、PNG／ZIP hash一致。
 
 ## 復帰先
 
-- provider checkpoint、キャンセルsweeper、監査補正、158テストは合格済み。
-- 利用者決定: 運用費は0円、AI生成API費用だけを利用者ごとの実費とする。有料Vercel planは使わない。
-- `G1-CRON-002`の終了条件: Vercel Cronを除去し、無料Supabaseのschedulerから認証済みdispatcher／cleanupを
-  起動するmigrationとPreview実行証拠を得る。無料枠で不可能なら受付停止と計画再審議へ戻る。
-- operator手順: `docs/zero-cost-scheduler-setup.md`。秘密値はエージェントを経由せず、VercelとSupabase Vaultへ直接登録する。
-- Vercel Preview: `https://kyozai-v1-ar1n8apgq-rahisekos-projects.vercel.app`（deployment `dpl_DMMeTdR3A7YPFE1r2t6xkKFwBAdX`）が
-  Ready。Root Directory=`apps/web`、親sourceをBuildへ含める設定を確認済み。
-- 終了後はdisposable Previewでmigration適用と実縦断へ戻る。
+- 利用者決定: Supabase基盤は採用しない。Cloudflare D1、R2、Workersへ変更し、Vercelは画面配備に維持する。
+- 運用費は0円、AI生成API費用だけを利用者ごとの実費とする。Free上限超過時は有料化せず、新規受付をfail-closedで停止する。
+- 次の着手: Supabase依存の棚卸し、Cloudflare対応先、認証方式、所有者分離、データ移行、Preview実証条件をG1計画へ確定する。
+- Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。
 
 ## 外部ブロッカー
 
-- disposable Preview Supabaseはログイン済みだが、既存3 projectのうちKYOZAI用に使うprojectが未指定で、migration、private bucket、RLSの実適用証拠がない。
-- Vercel Previewで登録済みの必須Secretは`CRON_SECRET`と`GEMINI_API_KEY`だけ。残る変数は`apps/web/.env.example`と
-  `docs/zero-cost-scheduler-setup.md`に従い、運用者がエージェントを経由せず直接登録する。
-- Vercel Hobbyは5分間隔Cronを拒否する。無料Supabase scheduler migrationは未適用で、実証も未完了。
-- 上記が揃うまでPreview実Provider完走、usage突合、物理artifact hash一致は判定できない。
+- Cloudflare account、D1 database、R2 private bucket、Workersの実行設定は未作成。
+- Supabase Authの代替となる認証方式は未決定であり、所有者分離の実装前に選定が必要。
+- Vercel PreviewはReadyだが、Cloudflare基盤の実証に必要な環境変数は未登録。

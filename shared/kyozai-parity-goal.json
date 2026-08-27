@@ -1,6 +1,6 @@
 {
   "id": "kyozai-skill-app-parity",
-  "version": "2026-08-26",
+  "version": "2026-08-27",
   "canonicalPlan": "docs/skill-app-parity-execution-plan-2026-08-26.md",
   "status": "in_progress",
   "activeGate": "G1",
@@ -24,7 +24,7 @@
       "status": "in_progress",
       "goalContribution": "Complete one real direct-text job through the durable APP path.",
       "acceptanceEvidence": ["preview_real_provider_run", "fault_recovery_matrix", "provider_usage_reconciliation"],
-      "gaps": ["missing_real_vertical_proof", "zero_cost_dispatcher", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount"]
+      "gaps": ["missing_real_vertical_proof", "cloudflare_foundation", "cloudflare_auth_ownership", "cloudflare_zero_cost_fail_closed", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount"]
     },
     {
       "id": "G2",

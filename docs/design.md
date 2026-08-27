@@ -199,3 +199,17 @@ provider利用料は、利用者ごとの実費として予約・確定・上限
 - Free tierの停止・上限・機能提供可否は、disposable Previewで実際に確認する。無料枠で実証できない場合は、
   有料化せず受付を停止し、実行正本を再審議する。
 - providerの実費は利用者単位の予約済み上限内だけで呼び出し、上限超過時はprovider呼出し前に停止する。
+
+---
+
+## 14. 2026-08-27 Cloudflareへの基盤変更
+
+利用者は、KYOZAIのDB、artifact保存、定期実行をSupabaseではなくCloudflareへ置き換えると決定した。
+Vercelは画面の配備先として維持する。Cloudflare D1を永続データ、R2をprivate artifact、Workersを
+dispatcher、cleanup、定期実行に使う。認証はSupabase Authを引き継がず、所有者分離を満たす方式を
+実装前に選定する。
+
+サーバー運用費は0円を維持する。Free上限を超えるときは有料化せず、新規受付をprovider呼出し前に
+停止する。本文、画像、画像QAの生成API費用だけは利用者ごとの実費として扱う。
+
+この決定により、同日付のSupabase scheduler方針は履歴として残すが、今後の実装判断には使わない。

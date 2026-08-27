@@ -121,3 +121,11 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 採用方針: 有料Vercel Cronは使わず、無料Supabase projectの`pg_cron`／`pg_net`から認証済みVercel endpointを起動する。
 - 未確定事項: Free tierでschedulerが実際に利用可能か、休止・上限時にfail-closedできるかはPreviewで実証する。
 - 状態: implementation_required
+
+## 2026-08-27 G1-CRON-002の方針変更
+
+- 決定: 利用者の明示指示により、無料Supabase projectを用いる方針を撤回し、Cloudflare D1、R2、Workersへ基盤を変更する。
+- 理由: DB、artifact保存、定期実行を含めてサーバー運用費0円を維持しつつ、Supabase project枠に依存しない構成へ変更するため。
+- 影響: Supabase schedulerのPreview実証は実施しない。Cloudflareへの置換範囲、認証方式、所有者分離、Free上限でのfail-closedをG1で実証する。
+- 次の判断: Cloudflare Freeの実利用条件を確認し、上限超過時に課金せず止まる構成を実装前に固定する。
+- 状態: superseded_by_user_decision

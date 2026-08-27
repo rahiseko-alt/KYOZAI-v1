@@ -69,6 +69,23 @@ Vercel有料planへの変更は選択肢から除外する。G1は、無料Supab
 cleanupが実行されること、(3) Free tierの上限・停止時に新規provider呼出しをfail-closedで止めること、
 の3点とする。無料枠で利用できない機能が判明した場合、有料化は行わず、受付停止と計画再審議へ戻る。
 
+## 2026-08-27 Cloudflare基盤への方針変更
+
+利用者が、KYOZAIの基盤をSupabaseではなくCloudflareへ変更すると決定した。この決定は直前の
+「無料Supabase projectでschedulerを動かす」方針を置き換える。Supabaseの既存projectを新規に
+作成、再利用、削除する作業は行わない。
+
+G1の基盤は、Cloudflare D1（job・revision・usage等の永続データ）、R2（private artifact）、
+Workers（認証済みdispatcher・cleanup・定期実行）へ置き換える。画面のVercel配備は継続する。
+Supabase Authの代替となる認証方式は、所有者分離を実装する前に選定して記録する。既存の
+Supabase migration、scheduler手順、Supabase依存コードは、Cloudflareの同等実装と実fixtureの
+証拠が得られるまで削除しない。
+
+運用費0円の条件は維持する。Cloudflare Freeの上限を超えた場合は、有料planへ切り替えず、
+provider呼出し前に新規受付をfail-closedで停止する。次セッションの最初の作業は、既存の
+Supabase依存を一覧化し、Cloudflareの対応先、認証境界、migration方式、Preview実証条件を
+G1の実行項目として確定することとする。
+
 ## 計画外問題
 
 現Gateの合格を妨げず、秘密情報、所有者分離、費用上限、データ消失、証拠の正当性を
