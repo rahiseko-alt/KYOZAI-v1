@@ -1766,3 +1766,19 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
   control-plane型検査・境界テスト、local D1 migration、local cancellation fixtureは別途合格している。
 - **修正状況**：このローカルdry-runを成功と扱わず、push後のLinux CI buildを合格証拠として確認する。
 - **再発防止**：Windowsで同じ終了コードが再発した場合も、bundle表示だけで合格にせず、実装検証とCI検証を分けて記録する。
+
+## 2026-08-28 private R2 clientでNode BufferをFetch bodyへ直接渡した
+
+- **何が起きたか**：Vercel Workflowからcontrol-planeへartifact bytesをstreamするclientの型検査で、
+  Nodeの`Buffer`がFetchの`BodyInit`として受理されず停止した。
+- **影響**：型検査段階で停止しており、R2/D1への書込み、provider呼出し、秘密値の表示・共有はない。
+- **修正**：`Uint8Array`入力をserver-sideの`Blob`へ明示変換してからFetch bodyに渡す。
+- **再発防止**：Node runtime固有のbinary型をHTTP境界へ渡す処理は、型検査とreadbackテストで検証する。
+
+## 2026-08-28 private R2 clientのBlob変換が共有buffer型を受理しなかった
+
+- **何が起きたか**：前項の修正で`Uint8Array`をそのまま`Blob`へ渡したところ、型定義上はshared bufferを
+  持ち得るviewとして拒否された。
+- **影響**：型検査段階で停止しており、R2/D1、provider、秘密値への影響はない。
+- **修正**：`Uint8Array.from`で専用のarray bufferへコピーしてから`Blob`を構成する。
+- **再発防止**：NodeとDOMのbinary型境界では、buffer所有権を型で明示して検査する。
