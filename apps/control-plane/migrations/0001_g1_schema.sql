@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   completed_at TEXT,
   created_at TEXT NOT NULL,
   UNIQUE (revision_id, stage, slide_number, attempt),
-  CHECK ((status = 'running') = (started_at IS NOT NULL)),
+  CHECK (status <> 'running' OR started_at IS NOT NULL),
   CHECK ((status IN ('passed', 'failed', 'skipped')) = (completed_at IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS stage_runs_lease_idx ON stage_runs (status, lease_expires_at);

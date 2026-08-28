@@ -1747,3 +1747,12 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **修正**：空白クラスを正しく解釈する正規表現へ変更し、正しいBearer headerが400（入力形式エラー）まで
   到達する境界テストを追加する。
 - **再発防止**：拒否だけでなく、認証済みrequestが次の入力検証段へ到達するテストを必須にする。
+
+## 2026-08-28 stage完了を拒否するD1制約があった
+
+- **何が起きたか**：local D1 fixtureでstageを`passed`へ更新したところ、初期schemaの
+  `status = 'running'`と`started_at IS NOT NULL`の同値制約が、完了後も保持すべき`started_at`を禁止して停止した。
+- **影響**：Workerは503でfail-closedとなり、stage・jobの状態は更新されなかった。remote D1/R2、Vercel、
+  provider、秘密値への影響はない。
+- **修正**：制約を「runningのstageにはstarted_atが必須」へ変更し、既存D1 tableを安全に再構築するmigrationを追加する。
+- **再発防止**：claim後のpass/fail fixtureでstarted_at、completed_at、terminal statusの組を検証する。
