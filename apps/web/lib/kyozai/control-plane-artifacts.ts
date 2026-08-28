@@ -42,3 +42,12 @@ export async function writePrivateControlPlaneArtifact(input: PrivateArtifactInp
 export async function finalizePrivateControlPlaneArtifacts(jobId: string, revisionId: string, artifactIds: string[], now: string, env: Env = process.env, fetcher: Fetcher = fetch) {
   return sendControlPlaneCommand<{ finalized: number }>("artifacts", { command: "finalize", jobId, revisionId, artifactIds, now }, env, fetcher);
 }
+
+export async function readPrivateControlPlaneArtifact(artifactId: string, env: Env = process.env, fetcher: Fetcher = fetch) {
+  const result = await sendControlPlaneCommand<{ artifact: { metadata: Record<string, unknown>; storage_path: string; sha256?: string | null } }>("artifacts", { command: "read", artifactId }, env, fetcher);
+  return { ...result.artifact, bytes: await getControlPlaneArtifactBytes(artifactId, env, fetcher) };
+}
+
+export async function updatePrivateControlPlaneArtifactMetadata(artifactId: string, metadata: Record<string, unknown>, env: Env = process.env, fetcher: Fetcher = fetch) {
+  return sendControlPlaneCommand<{ artifactId: string }>("artifacts", { command: "updateMetadata", artifactId, metadataJson: JSON.stringify(metadata) }, env, fetcher);
+}

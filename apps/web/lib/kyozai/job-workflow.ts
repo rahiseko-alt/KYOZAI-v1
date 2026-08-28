@@ -23,6 +23,8 @@ import type { DurableContentStage } from "./durable-stages";
 import { isE2eRuntimeAllowed } from "./e2e-runtime";
 import { injectG1Fault } from "./g1-fault-injection";
 import { withProviderAttemptContext } from "./provider-attempt";
+import { cloudflareStateEnabled, getControlPlaneArtifactBytes, sendControlPlaneCommand } from "./control-plane-client";
+import { finalizePrivateControlPlaneArtifacts, readPrivateControlPlaneArtifact, updatePrivateControlPlaneArtifactMetadata, writePrivateControlPlaneArtifact } from "./control-plane-artifacts";
 
 const ARTIFACT_BUCKET = "kyozai-artifacts";
 type StoredArtifact = { id: string; storagePath: string; sha256: string; bytes: Buffer };
@@ -33,6 +35,10 @@ function artifactPath(jobId: string, revisionId: string, lifecycle: "draft" | "v
 }
 
 async function existingPassedArtifact(jobId: string, revisionId: string, stage: KyozaiJobStage, slideNumber = 0): Promise<string | undefined> {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneCommand<{ artifactId?: string }>("stages", { command: "findPassedArtifact", jobId, revisionId, stage, slideNumber });
+    return result.artifactId;
+  }
   const supabase = createServerSupabaseClient();
   const { data } = await supabase.from("stage_runs").select("output_artifact_ids").eq("job_id", jobId).eq("revision_id", revisionId)
     .eq("stage", stage).eq("slide_number", slideNumber).eq("status", "passed").order("attempt", { ascending: false }).limit(1).maybeSingle();
@@ -46,6 +52,7 @@ async function existingPassedArtifact(jobId: string, revisionId: string, stage: 
   return artifact ? artifactId : undefined;
 }
 async function readJsonArtifact<T>(artifactId: string): Promise<T> {
+  if (cloudflareStateEnabled()) return JSON.parse((await getControlPlaneArtifactBytes(artifactId)).toString("utf8")) as T;
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("artifacts").select("storage_bucket, storage_path").eq("id", artifactId).maybeSingle();
   if (error || !data) throw new Error("workflow_artifact_not_found");
@@ -55,6 +62,15 @@ async function readJsonArtifact<T>(artifactId: string): Promise<T> {
 }
 async function beginStage(jobId: string, revisionId: string, stage: KyozaiJobStage, slideNumber = 0): Promise<StageRun | undefined> {
   if (await existingPassedArtifact(jobId, revisionId, stage, slideNumber)) return undefined;
+  if (cloudflareStateEnabled()) {
+    const now = new Date();
+    const ensured = await sendControlPlaneCommand<{ stage: { id: string; attempt: number; status: string } }>("stages", { command: "ensure", stageRunId: randomUUID(), jobId, revisionId, stage, slideNumber, validator: `durable-${stage}`, now: now.toISOString() });
+    if (ensured.stage.status !== "pending" && ensured.stage.status !== "running") return undefined;
+    const leaseOwner = `workflow-${randomUUID()}`;
+    const claimed = await sendControlPlaneCommand<{ stage?: { id: string; attempt: number } }>("stages", { command: "claim", stageRunId: ensured.stage.id, leaseOwner, leaseSeconds: 900, now: now.toISOString(), leaseExpiresAt: new Date(now.getTime() + 900_000).toISOString() });
+    if (!claimed.stage || typeof claimed.stage.id !== "string" || !Number.isInteger(claimed.stage.attempt)) return undefined;
+    return { id: claimed.stage.id, attempt: claimed.stage.attempt, leaseOwner };
+  }
   const supabase = createServerSupabaseClient();
   const { data: latest } = await supabase.from("stage_runs").select("id, attempt, status").eq("job_id", jobId).eq("revision_id", revisionId)
     .eq("stage", stage).eq("slide_number", slideNumber).order("attempt", { ascending: false }).limit(1).maybeSingle();
@@ -73,10 +89,15 @@ async function withStage(jobId: string, revisionId: string, stage: KyozaiJobStag
   if (existing) return [existing];
   const run = await beginStage(jobId, revisionId, stage, slideNumber);
   if (!run) return undefined;
-  const supabase = createServerSupabaseClient();
   try {
     const value = await withProviderAttemptContext({ jobId, revisionId, stageRunId: run.id, stage, slideNumber }, () => work(run));
     injectG1Fault("before_stage_pass", { stageAttempt: run.attempt });
+    if (cloudflareStateEnabled()) {
+      const result = await sendControlPlaneCommand<{ passed: boolean }>("stages", { command: "pass", stageRunId: run.id, leaseOwner: run.leaseOwner, outputArtifactIds: value.artifactIds, validator: `durable-${stage}`, usageJson: "{}", now: new Date().toISOString() });
+      if (!result.passed) throw new Error("stage_pass_failed");
+      return value.artifactIds;
+    }
+    const supabase = createServerSupabaseClient();
     const { data: passed, error } = await supabase.rpc("pass_kyozai_stage_run", {
       p_stage_run_id: run.id, p_lease_owner: run.leaseOwner, p_output_artifact_ids: value.artifactIds,
       p_validator: `durable-${stage}`, p_usage: {},
@@ -84,14 +105,23 @@ async function withStage(jobId: string, revisionId: string, stage: KyozaiJobStag
     if (error || !passed) throw new Error("stage_pass_failed");
     return value.artifactIds;
   } catch (error) {
+    if (cloudflareStateEnabled()) {
+      await sendControlPlaneCommand("stages", { command: "fail", stageRunId: run.id, leaseOwner: run.leaseOwner, errorCode: "WORKER_STAGE_FAILED", retry: stage === "image_generate" && run.attempt < 1, ...(stage === "image_generate" && run.attempt < 1 ? { retryStageRunId: randomUUID() } : {}), retryReason: error instanceof Error ? error.message : "unknown", now: new Date().toISOString() });
+      throw error;
+    }
+    const supabase = createServerSupabaseClient();
     await supabase.rpc("fail_kyozai_stage_run", { p_stage_run_id: run.id, p_lease_owner: run.leaseOwner, p_error_code: "WORKER_STAGE_FAILED", p_retry_reason: error instanceof Error ? error.message : "unknown", p_retry: stage === "image_generate" && run.attempt < 1 });
     throw error;
   }
 }
 async function storeArtifact(jobId: string, revisionId: string, kind: KyozaiArtifactKind, name: string, bytes: Buffer, mediaType: string, slideNumber?: number): Promise<StoredArtifact> {
-  const supabase = createServerSupabaseClient();
   const id = randomUUID();
   const storagePath = artifactPath(jobId, revisionId, "draft", id, name);
+  if (cloudflareStateEnabled()) {
+    const stored = await writePrivateControlPlaneArtifact({ artifactId: id, jobId, revisionId, kind, storageBucket: ARTIFACT_BUCKET, storagePath, mediaType, bytes, metadata: slideNumber ? { slideNumber } : {}, now: new Date().toISOString() });
+    return { id: stored.artifactId, storagePath, sha256: stored.sha256, bytes: stored.bytes };
+  }
+  const supabase = createServerSupabaseClient();
   const { error: uploadError } = await supabase.storage.from(ARTIFACT_BUCKET).upload(storagePath, bytes, { contentType: mediaType, upsert: false });
   if (uploadError) throw new Error("artifact_upload_failed");
   // Storage is the delivery source of truth. Validate the object read back from
@@ -112,13 +142,26 @@ async function storeJson(jobId: string, revisionId: string, kind: KyozaiArtifact
   return storeArtifact(jobId, revisionId, kind, name, Buffer.from(JSON.stringify(value, null, 2)), "application/json");
 }
 
+async function readExistingImageArtifact(artifactId: string) {
+  if (cloudflareStateEnabled()) {
+    const artifact = await readPrivateControlPlaneArtifact(artifactId);
+    return { ...(artifact.metadata as Omit<RenderedSlideImage, "data">), data: "", bytes: artifact.bytes, artifactId } as RenderedSlideImage & { bytes: Buffer; artifactId: string };
+  }
+  const supabase = createServerSupabaseClient();
+  const { data: artifact } = await supabase.from("artifacts").select("id, storage_bucket, storage_path, metadata").eq("id", artifactId).maybeSingle();
+  if (!artifact) throw new Error("existing_image_missing");
+  const { data: blob, error } = await supabase.storage.from(artifact.storage_bucket).download(artifact.storage_path);
+  if (error || !blob) throw new Error("existing_image_download_failed");
+  return { ...(artifact.metadata as Omit<RenderedSlideImage, "data">), data: "", bytes: Buffer.from(await blob.arrayBuffer()), artifactId: artifact.id } as RenderedSlideImage & { bytes: Buffer; artifactId: string };
+}
+
 export async function loadOrCreatePackage(jobId: string, revisionId: string, request: Record<string, unknown>, stopAfter?: DurableContentStage): Promise<TeachingPackage | undefined> {
   const existingDesign = await existingPassedArtifact(jobId, revisionId, "design"); if (existingDesign) return readJsonArtifact<TeachingPackage>(existingDesign);
   const existingSources = await existingPassedArtifact(jobId, revisionId, "source_ingest");
   let sources = existingSources ? await readJsonArtifact<SourceInput[]>(existingSources) : undefined;
   if (!sources) {
     const outputIds = await withStage(jobId, revisionId, "source_ingest", 0, async () => {
-      const loaded = await loadDurableSources(jobId, request, createServerSupabaseClient());
+      const loaded = await loadDurableSources(jobId, request, cloudflareStateEnabled() ? undefined : createServerSupabaseClient());
       const artifact = await storeJson(jobId, revisionId, "source", "source-inputs.json", loaded);
       sources = loaded;
       return { artifactIds: [artifact.id] };
@@ -192,12 +235,7 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
     const existingImageId = await existingPassedArtifact(jobId, revisionId, "image_generate", slide.number);
     let image: RenderedSlideImage & { bytes: Buffer; artifactId: string };
     if (existingImageId) {
-      const supabase = createServerSupabaseClient();
-      const { data: artifact } = await supabase.from("artifacts").select("id, storage_bucket, storage_path, metadata").eq("id", existingImageId).maybeSingle();
-      if (!artifact) throw new Error("existing_image_missing");
-      const { data: blob, error } = await supabase.storage.from(artifact.storage_bucket).download(artifact.storage_path);
-      if (error || !blob) throw new Error("existing_image_download_failed");
-      image = { ...(artifact.metadata as Omit<RenderedSlideImage, "data">), data: "", bytes: Buffer.from(await blob.arrayBuffer()), artifactId: artifact.id } as RenderedSlideImage & { bytes: Buffer; artifactId: string };
+      image = await readExistingImageArtifact(existingImageId);
     } else {
       let created: (RenderedSlideImage & { bytes: Buffer; artifactId: string }) | undefined;
       const outputIds = await withStage(jobId, revisionId, "image_generate", slide.number, async () => {
@@ -205,8 +243,8 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
         const bytes = Buffer.from(rendered.data, "base64");
         const artifact = await storeArtifact(jobId, revisionId, "slide_image", `slide-${String(slide.number).padStart(2, "0")}.png`, bytes, "image/png", slide.number);
         created = { ...rendered, bytes, artifactId: artifact.id };
-        const supabase = createServerSupabaseClient();
-        await supabase.from("artifacts").update({ metadata: { ...rendered, data: undefined } }).eq("id", artifact.id);
+        if (cloudflareStateEnabled()) await updatePrivateControlPlaneArtifactMetadata(artifact.id, { ...rendered, data: undefined });
+        else await createServerSupabaseClient().from("artifacts").update({ metadata: { ...rendered, data: undefined } }).eq("id", artifact.id);
         return { artifactIds: [artifact.id] };
       });
       if (created) {
@@ -215,13 +253,7 @@ export async function renderSlides(jobId: string, revisionId: string, teachingPa
         // Another recovered worker may have completed the same stage between the
         // initial lookup and our lease claim. Reuse its validated result instead
         // of reporting a false generation failure.
-        const artifactId = outputIds[0];
-        const supabase = createServerSupabaseClient();
-        const { data: artifact } = await supabase.from("artifacts").select("id, storage_bucket, storage_path, metadata").eq("id", artifactId).maybeSingle();
-        if (!artifact) throw new Error("existing_image_missing");
-        const { data: blob, error } = await supabase.storage.from(artifact.storage_bucket).download(artifact.storage_path);
-        if (error || !blob) throw new Error("existing_image_download_failed");
-        image = { ...(artifact.metadata as Omit<RenderedSlideImage, "data">), data: "", bytes: Buffer.from(await blob.arrayBuffer()), artifactId: artifact.id } as RenderedSlideImage & { bytes: Buffer; artifactId: string };
+        image = await readExistingImageArtifact(outputIds[0]);
       } else {
         // The stage is owned by another live worker. Let the outbox retry instead
         // of continuing to package an incomplete deck.
@@ -247,9 +279,13 @@ export async function finalizePackage(jobId: string, revisionId: string, teachin
     const artifacts = await Promise.all(built.artifacts.map((item) => storeArtifact(jobId, revisionId, item.kind, item.name, item.bytes, item.mediaType)));
     const zip = await storeArtifact(jobId, revisionId, "package_zip", "package.zip", built.packageZip, "application/zip");
     const ids = [...artifacts.map((artifact) => artifact.id), ...images.map((image) => image.artifactId), zip.id];
-    const supabase = createServerSupabaseClient();
-    const { error: promoteError } = await supabase.rpc("promote_kyozai_artifacts_to_final", { p_job_id: jobId, p_revision_id: revisionId, p_artifact_ids: ids });
-    if (promoteError) throw new Error("artifact_promotion_failed");
+    if (cloudflareStateEnabled()) {
+      const promoted = await finalizePrivateControlPlaneArtifacts(jobId, revisionId, ids, new Date().toISOString());
+      if (promoted.finalized !== ids.length) throw new Error("artifact_promotion_failed");
+    } else {
+      const { error: promoteError } = await createServerSupabaseClient().rpc("promote_kyozai_artifacts_to_final", { p_job_id: jobId, p_revision_id: revisionId, p_artifact_ids: ids });
+      if (promoteError) throw new Error("artifact_promotion_failed");
+    }
     completedArtifactId = zip.id;
     return { artifactIds: [zip.id] };
   });

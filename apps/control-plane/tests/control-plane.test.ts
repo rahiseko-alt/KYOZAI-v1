@@ -90,6 +90,7 @@ describe("control plane boundary", () => {
 
   it("accepts only checksummed artifact finalization commands", () => {
     expect(parseArtifactCommand({ command: "read", artifactId: "artifact-1" }).command).toBe("read");
+    expect(parseArtifactCommand({ command: "updateMetadata", artifactId: "artifact-1", metadataJson: "{}" }).command).toBe("updateMetadata");
     expect(parseArtifactCommand({ command: "validate", artifactId: "artifact-1", sha256: "a".repeat(64) }).command).toBe("validate");
     expect(() => parseArtifactCommand({ command: "validate", artifactId: "artifact-1", sha256: "short" })).toThrow("BAD_COMMAND");
   });
