@@ -50,3 +50,8 @@
   request read、job/revisionのcompleted、job/revisionのfailed、未使用quotaのreleasedを確認した。
 - 次はprovider attemptのcheckpoint/result artifactをD1/R2へ移し、Supabaseを経由しない実Providerの
   二重呼出し防止と結果回復を完成させる。
+
+- 完了: provider attemptをfeature flag下でD1 reservation/settlementとprivate R2 checkpointへ移した。
+  checkpointは保存後にreadback SHA-256照合してからusageをconfirmedにし、同一fingerprintの再送は
+  providerを呼ばずにprivate checkpointを回収する。Cloudflare分岐の回収contract testを追加した。
+  次はdirect-text WorkflowをCloudflare stateのみで起動する実fixtureと、dispatch/job状態遷移の結合を検証する。
