@@ -249,6 +249,11 @@ export async function finalizePackage(jobId: string, revisionId: string, teachin
 }
 
 export async function markJobCompleted(jobId: string, revisionId: string) {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneCommand<{ completed: boolean }>("jobs", { command: "workflowComplete", jobId, revisionId, now: new Date().toISOString() });
+    if (!result.completed) return;
+    return;
+  }
   const supabase = createServerSupabaseClient();
   const { data: job, error: jobReadError } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
   if (jobReadError || !job) throw new Error("job_completion_failed");
@@ -274,6 +279,10 @@ export function isBusyStageError(error: unknown) {
 }
 
 export async function markWorkflowFailed(jobId: string) {
+  if (cloudflareStateEnabled()) {
+    await sendControlPlaneCommand("jobs", { command: "workflowFail", jobId, now: new Date().toISOString() });
+    return;
+  }
   const supabase = createServerSupabaseClient();
   const { data: job } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
   if (!job || isWorkflowTerminalStatus(job.status)) return;
@@ -288,6 +297,14 @@ export async function markWorkflowFailed(jobId: string) {
 }
 
 export async function loadExecutableJob(jobId: string) {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneCommand<{ job: { request_json: unknown; image_model: unknown; status: unknown } }>("jobs", { command: "workflowRead", jobId });
+    const request = typeof result.job.request_json === "string" ? JSON.parse(result.job.request_json) : result.job.request_json;
+    if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("job_request_invalid");
+    if (isWorkflowTerminalStatus(result.job.status) || result.job.status === "cancelling") return;
+    if (!isImageModelId(result.job.image_model)) throw new Error("job_image_model_invalid");
+    return { request_json: request, image_model: result.job.image_model, status: result.job.status };
+  }
   const supabase = createServerSupabaseClient();
   const { data: job, error } = await supabase.from("jobs").select("request_json, image_model, status").eq("id", jobId).maybeSingle();
   if (error || !job) throw new Error("job_not_found");

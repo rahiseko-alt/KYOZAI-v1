@@ -42,3 +42,11 @@
 - Vercel PreviewはReadyだが、Cloudflare基盤の実証に必要な環境変数は未登録。
 - Windows/Node 24では`wrangler deploy --dry-run`がbundleとbinding解決後に`0xC0000409`で異常終了する。
   local D1 migrationとlocal Worker起動は合格しているが、Cloudflare実行環境またはCIでdry-runを再検証する。
+
+## 最新の実装状態
+
+- Workflowの直接入力経路で必要なjob read、正常完了、失敗時のfail-closed usage精算を、
+  `KYOZAI_CLOUDFLARE_STATE_ENABLED=1`時にD1 command gatewayへ移した。local D1 fixtureで
+  request read、job/revisionのcompleted、job/revisionのfailed、未使用quotaのreleasedを確認した。
+- 次はprovider attemptのcheckpoint/result artifactをD1/R2へ移し、Supabaseを経由しない実Providerの
+  二重呼出し防止と結果回復を完成させる。

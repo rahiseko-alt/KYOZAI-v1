@@ -50,6 +50,9 @@ describe("control plane boundary", () => {
     expect(parseJobCommand({ command: "list", ownerId: "access-user@example.test" })).toEqual({ command: "list", ownerId: "access-user@example.test" });
     expect(() => parseJobCommand({ command: "drop", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");
     expect(() => parseJobCommand({ command: "read", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");
+    expect(parseJobCommand({ command: "workflowRead", jobId: "job-1" })).toEqual({ command: "workflowRead", jobId: "job-1" });
+    expect(parseJobCommand({ command: "workflowComplete", jobId: "job-1", revisionId: "revision-1", now: "2026-08-28T00:00:00.000Z" }).command).toBe("workflowComplete");
+    expect(() => parseJobCommand({ command: "workflowFail", jobId: "job-1" })).toThrow("BAD_COMMAND");
     expect(parseJobCommand({ command: "settlePendingCancellations", now: "2026-08-28T00:00:00.000Z" })).toEqual({ command: "settlePendingCancellations", now: "2026-08-28T00:00:00.000Z", limit: 25 });
   });
 

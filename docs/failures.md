@@ -1822,3 +1822,12 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：型検査までは合格しており、CIはlint時点で停止した。remote D1/R2、Vercel、provider、秘密値への影響はない。
 - **修正**：artifactの永続化・readback・既存画像復元を単独の`job-workflow-artifacts.ts`へ分離した。
 - **再発防止**：workflow組立ファイルへstorage実装を積み増さず、単独で変更・検証される責務ごとに分ける。
+
+## 2026-08-28 WindowsのWorker dry-runが再度異常終了した
+
+- **何が起きたか**：workflow state command追加後の`pnpm -r build`でも、Worker bundleとbinding解決、
+  `--dry-run: exiting now.`の後にWindows/Node 24のWrangler processが`0xC0000409`で終了した。
+- **影響**：Cloudflareへの配備、remote D1/R2、Vercel、provider、秘密値への影響はない。web buildはこの時点まで開始済みだったが、
+  recursive buildはcontrol-planeの異常終了により失敗扱いとなった。
+- **修正状況**：既知のローカル環境問題として成功扱いにせず、Linux CIのbuild証拠で判定する。実装側のtypecheck、lint、unit test、local D1 fixtureは別途実行する。
+- **再発防止**：この環境でWorker buildを実行した場合は、exit codeとCIのLinux結果を必ず分けて記録する。

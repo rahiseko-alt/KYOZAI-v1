@@ -6,6 +6,9 @@ export type JobCommand =
   | { command: "read"; ownerId: string; jobId: string }
   | { command: "cancel"; ownerId: string; jobId: string; now: string }
   | { command: "delete"; ownerId: string; jobId: string; now: string }
+  | { command: "workflowRead"; jobId: string }
+  | { command: "workflowComplete"; jobId: string; revisionId: string; now: string }
+  | { command: "workflowFail"; jobId: string; now: string }
   | { command: "settlePendingCancellations"; now: string; limit: number };
 
 export class JobCommandError extends Error {
@@ -25,7 +28,7 @@ function requiredInteger(value: unknown, minimum: number, maximum: number) {
 }
 
 function commandName(value: unknown) {
-  if (value === "create" || value === "list" || value === "read" || value === "cancel" || value === "delete" || value === "settlePendingCancellations") return value;
+  if (value === "create" || value === "list" || value === "read" || value === "cancel" || value === "delete" || value === "workflowRead" || value === "workflowComplete" || value === "workflowFail" || value === "settlePendingCancellations") return value;
   throw new JobCommandError("BAD_COMMAND");
 }
 
@@ -36,6 +39,9 @@ export function parseJobCommand(value: unknown): JobCommand {
   if (command === "settlePendingCancellations") {
     return { command, now: requiredText(input.now, "now"), limit: input.limit === undefined ? 25 : requiredInteger(input.limit, 1, 50) };
   }
+  if (command === "workflowRead") return { command, jobId: requiredText(input.jobId, "jobId") };
+  if (command === "workflowComplete") return { command, jobId: requiredText(input.jobId, "jobId"), revisionId: requiredText(input.revisionId, "revisionId"), now: requiredText(input.now, "now") };
+  if (command === "workflowFail") return { command, jobId: requiredText(input.jobId, "jobId"), now: requiredText(input.now, "now") };
   const ownerId = requiredText(input.ownerId, "ownerId");
   if (command === "create") {
     const inputKind = input.inputKind;
@@ -106,6 +112,41 @@ export async function executeJobCommand(db: D1Database, input: JobCommand) {
     if (raced && raced.input_kind === input.inputKind && raced.request_json === input.requestJson && raced.image_model === input.imageModel) return { jobId: raced.id, idempotent: true };
     if (raced) throw new JobCommandError("CONFLICT");
     throw new JobCommandError("SERVICE_UNAVAILABLE");
+  }
+  if (input.command === "workflowRead") {
+    const job = await db.prepare("SELECT request_json, image_model, status FROM jobs WHERE id = ?").bind(input.jobId).first<JobRow>();
+    if (!job) throw new JobCommandError("NOT_FOUND");
+    return { job };
+  }
+  if (input.command === "workflowComplete") {
+    const job = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind(input.jobId).first<{ status: string }>();
+    if (!job) throw new JobCommandError("NOT_FOUND");
+    if (job.status === "cancelling" || job.status === "cancelled" || job.status === "deleting" || job.status === "deleted") return { completed: false };
+    if (job.status === "failed") return { completed: false };
+    if (job.status !== "completed") {
+      const result = await db.batch([
+        db.prepare("UPDATE jobs SET status = 'completed', current_stage = NULL, error_code = NULL, updated_at = ? WHERE id = ? AND status IN ('queued', 'running')").bind(input.now, input.jobId),
+        db.prepare("UPDATE job_revisions SET status = 'completed', completed_at = ? WHERE id = ? AND job_id = ? AND status IN ('queued', 'running')").bind(input.now, input.revisionId, input.jobId),
+      ]);
+      if (result[0].meta.changes !== 1) throw new JobCommandError("CONFLICT");
+    }
+    return { completed: true };
+  }
+  if (input.command === "workflowFail") {
+    const job = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind(input.jobId).first<{ status: string }>();
+    if (!job) throw new JobCommandError("NOT_FOUND");
+    if (["completed", "failed", "cancelled", "deleting", "deleted"].includes(job.status)) return { failed: false };
+    const retrying = await db.prepare("SELECT id FROM stage_runs WHERE job_id = ? AND status = 'pending' AND attempt > 0 LIMIT 1").bind(input.jobId).first();
+    if (retrying) return { failed: false, retrying: true };
+    if (job.status === "cancelling") return { failed: false, cancelled: await settleCancellation(db, input.jobId, input.now) };
+    const result = await db.batch([
+      db.prepare("UPDATE usage_events SET charge_state = 'ambiguous', actual_cost_units = estimated_cost_units WHERE job_id = ? AND charge_state = 'reserved'").bind(input.jobId),
+      db.prepare("UPDATE jobs SET status = 'failed', error_code = 'workflow_failed', current_stage = NULL, updated_at = ? WHERE id = ? AND status IN ('queued', 'running')").bind(input.now, input.jobId),
+      db.prepare("UPDATE job_revisions SET status = 'failed', completed_at = ? WHERE job_id = ? AND status IN ('queued', 'running')").bind(input.now, input.jobId),
+      db.prepare("UPDATE quota_reservations SET confirmed_image_calls = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN image_count ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), confirmed_cost_units = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN actual_cost_units ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), reserved_image_calls = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN image_count ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), reserved_cost_units = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN actual_cost_units ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), inflight_image_calls = 0, inflight_cost_units = 0, charge_state = CASE WHEN EXISTS (SELECT 1 FROM usage_events WHERE job_id = ? AND charge_state = 'ambiguous') THEN 'ambiguous' WHEN COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN actual_cost_units ELSE 0 END) FROM usage_events WHERE job_id = ?), 0) = 0 THEN 'released' ELSE 'confirmed' END, released_at = ? WHERE job_id = ?").bind(input.jobId, input.jobId, input.jobId, input.jobId, input.jobId, input.jobId, input.now, input.jobId),
+    ]);
+    if (result[1].meta.changes !== 1) throw new JobCommandError("CONFLICT");
+    return { failed: true };
   }
   if (input.command === "list") {
     const rows = await db.prepare("SELECT id, status, current_stage, active_revision_number, error_code FROM jobs WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 50")
