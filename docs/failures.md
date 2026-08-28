@@ -1782,3 +1782,27 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：型検査段階で停止しており、R2/D1、provider、秘密値への影響はない。
 - **修正**：`Uint8Array.from`で専用のarray bufferへコピーしてから`Blob`を構成する。
 - **再発防止**：NodeとDOMのbinary型境界では、buffer所有権を型で明示して検査する。
+
+## 2026-08-28 D1 provider settlementの行型が不十分だった
+
+- **何が起きたか**：provider settlement commandの型検査で、D1の`first()`結果を直接cost値として扱い、
+  戻り値のnull／scalar表現を十分に狭めていないことが検出された。
+- **影響**：型検査段階で停止しており、D1/R2、provider、秘密値への影響はない。
+- **修正**：cost rowを明示的に検証し、値が不正ならquota更新前に競合としてfail-closedにする。
+- **再発防止**：D1のdynamic rowは外部境界と同じく、使用前に型を検証する。
+
+## 2026-08-28 D1 provider trigger後の更新件数を成功判定に使った
+
+- **何が起きたか**：local D1 fixtureでprovider settlementはusageとquotaを正しく更新したが、
+  triggerを伴う`UPDATE`のreturned change countを一律に1と仮定したため、gatewayが409を返した。
+- **影響**：fixture stateだけで起き、provider実呼出し、remote D1/R2、秘密値への影響はない。
+- **修正**：更新件数ではなく、同一usage rowのcharge state readbackでsettlement成功を確認する。
+- **再発防止**：D1 triggerを伴う更新では、driverの件数だけを結果契約にせず永続stateを再読込して確認する。
+
+## 2026-08-28 D1 provider reservationでもtrigger後の更新件数を成功判定に使った
+
+- **何が起きたか**：同じlocal D1 fixtureで、reservation insertはusage rowとinflight quotaを正しく作成したが、
+  triggerを伴うinsertのreturned change countを一律に1と仮定したため初回requestへ409を返した。
+- **影響**：fixture stateだけで起き、provider実呼出し、remote D1/R2、秘密値への影響はない。
+- **修正**：insertが例外なく完了したことを初回reservation成功とし、unique conflict時だけ既存rowを読んで再送扱いにする。
+- **再発防止**：D1 triggerのあるcommandでは、各DMLのreturned change countを成功契約へ使わない。

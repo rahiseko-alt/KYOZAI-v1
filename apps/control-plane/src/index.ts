@@ -13,6 +13,7 @@ import { executeStageCommand, StageCommandError, parseStageCommand } from "./sta
 import { executeArtifactCommand, ArtifactCommandError, parseArtifactCommand } from "./artifact-commands";
 import { ArtifactObjectError, getArtifactBytes, putArtifactBytes } from "./artifact-objects";
 import { DispatchCommandError, executeDispatchCommand, parseDispatchCommand } from "./dispatch-commands";
+import { executeProviderCommand, parseProviderCommand, ProviderCommandError } from "./provider-commands";
 
 type Fetcher = typeof fetch;
 
@@ -105,6 +106,14 @@ export async function handleControlPlaneRequest(request: Request, env: ControlPl
         return Response.json(await executeDispatchCommand(env.DB, parseDispatchCommand(await request.json())), { headers: noStore });
       } catch (error) {
         if (error instanceof DispatchCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : 400, headers: noStore });
+        return unavailable();
+      }
+    }
+    if (request.method === "POST" && pathname === "/internal/v1/providers/commands" && await bindingsReady(env)) {
+      try {
+        return Response.json(await executeProviderCommand(env.DB, parseProviderCommand(await request.json())), { headers: noStore });
+      } catch (error) {
+        if (error instanceof ProviderCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : 400, headers: noStore });
         return unavailable();
       }
     }

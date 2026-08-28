@@ -23,7 +23,7 @@ function responseError(response: Response): never {
 }
 
 /** Server-only gateway. Browser code never receives the control-plane token. */
-export async function sendControlPlaneCommand<T>(resource: "jobs" | "dispatches" | "stages" | "artifacts", command: Record<string, unknown>, env: Env = process.env, fetcher: Fetcher = fetch): Promise<T> {
+export async function sendControlPlaneCommand<T>(resource: "jobs" | "dispatches" | "stages" | "artifacts" | "providers", command: Record<string, unknown>, env: Env = process.env, fetcher: Fetcher = fetch): Promise<T> {
   const config = controlPlaneConfig(env);
   let response: Response;
   try {

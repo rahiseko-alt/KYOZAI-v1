@@ -6,6 +6,7 @@ import { parseStageCommand } from "../src/stage-commands";
 import { parseArtifactCommand } from "../src/artifact-commands";
 import { putArtifactBytes } from "../src/artifact-objects";
 import { parseDispatchCommand } from "../src/dispatch-commands";
+import { parseProviderCommand } from "../src/provider-commands";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return {
@@ -102,6 +103,11 @@ describe("control plane boundary", () => {
   it("accepts only typed workflow dispatch lease commands", () => {
     expect(parseDispatchCommand({ command: "claim", leaseOwner: "cron-1", now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" }).command).toBe("claim");
     expect(() => parseDispatchCommand({ command: "requeue", dispatchId: "d-1", leaseOwner: "cron-1", errorCode: "start_failed", now: "now" })).toThrow("BAD_COMMAND");
+  });
+
+  it("requires a checkpoint before provider usage can be confirmed", () => {
+    expect(parseProviderCommand({ command: "reserve", usageEventId: "usage-1", jobId: "job-1", revisionId: "revision-1", stageRunId: "stage-1", operation: "image_generation", provider: "openai", model: "gpt-image-1", requestFingerprint: "fingerprint-1", imageCount: 1, costUnits: 1, now: "2026-08-28T00:00:00.000Z" }).command).toBe("reserve");
+    expect(() => parseProviderCommand({ command: "settle", jobId: "job-1", requestFingerprint: "fingerprint-1", chargeState: "confirmed" })).toThrow("BAD_COMMAND");
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
