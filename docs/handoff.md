@@ -28,7 +28,8 @@
   D1 batchで作成する。local D1 fixtureで初回作成、同一入力の冪等再送、owner-scoped一覧取得を確認した。
   型検査、8境界テスト、依存監査は合格した。
 - 次の着手: create commandのD1実fixture（許可・拒否・競合）を追加し、webのstate I/Oをgateway clientへ
-  段階置換する。
+  段階置換する。Webにはserver-onlyのcontrol-plane clientを追加済みで、tokenをブラウザーへ渡さず、
+  通信不成立は503へfail-closedにする。Web全160テスト、型検査、lintは合格した。
 - Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。
 
 ## 外部ブロッカー
