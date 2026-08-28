@@ -16,11 +16,11 @@ function controlPlaneConfig(env: Env) {
 }
 
 /** Server-only gateway. Browser code never receives the control-plane token. */
-export async function sendControlPlaneJobCommand<T>(command: Record<string, unknown>, env: Env = process.env, fetcher: Fetcher = fetch): Promise<T> {
+export async function sendControlPlaneCommand<T>(resource: "jobs" | "dispatches" | "stages" | "artifacts", command: Record<string, unknown>, env: Env = process.env, fetcher: Fetcher = fetch): Promise<T> {
   const config = controlPlaneConfig(env);
   let response: Response;
   try {
-    response = await fetcher(config.url, {
+    response = await fetcher(config.url.replace("/jobs/commands", `/${resource}/commands`), {
       method: "POST",
       headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json", "Cache-Control": "no-store" },
       body: JSON.stringify(command), cache: "no-store",
@@ -33,4 +33,12 @@ export async function sendControlPlaneJobCommand<T>(command: Record<string, unkn
   if (response.status === 409) throw conflict("このjobは現在の状態では操作できません。");
   if (response.status === 400) throw badRequest("job要求を確認してください。");
   throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "教材jobの保存先を利用できません。", 60);
+}
+
+export async function sendControlPlaneJobCommand<T>(command: Record<string, unknown>, env: Env = process.env, fetcher: Fetcher = fetch): Promise<T> {
+  return sendControlPlaneCommand("jobs", command, env, fetcher);
+}
+
+export function cloudflareStateEnabled(env: Env = process.env) {
+  return env.KYOZAI_CLOUDFLARE_STATE_ENABLED === "1";
 }
