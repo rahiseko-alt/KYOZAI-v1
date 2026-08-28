@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handleControlPlaneRequest, invokeScheduler, scheduledKind, type ControlPlaneEnv } from "../src";
 import { executeJobCommand, parseJobCommand } from "../src/job-commands";
 import { parseStageCommand } from "../src/stage-commands";
+import { parseArtifactCommand } from "../src/artifact-commands";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return {
@@ -79,6 +80,11 @@ describe("control plane boundary", () => {
     expect(parseStageCommand({ command: "pass", stageRunId: "stage-1", leaseOwner: "workflow-1", outputArtifactIds: [], validator: "fixture", usageJson: "{}", now: "2026-08-28T00:00:00.000Z" }).command).toBe("pass");
     expect(() => parseStageCommand({ command: "pass", stageRunId: "stage-1", leaseOwner: "workflow-1", outputArtifactIds: [], validator: "fixture", usageJson: "not-json", now: "now" })).toThrow("BAD_COMMAND");
     expect(() => parseStageCommand({ command: "fail", stageRunId: "stage-1", leaseOwner: "workflow-1", errorCode: "FAILED", retry: true, now: "now" })).toThrow("BAD_COMMAND");
+  });
+
+  it("accepts only checksummed artifact finalization commands", () => {
+    expect(parseArtifactCommand({ command: "validate", artifactId: "artifact-1", sha256: "a".repeat(64) }).command).toBe("validate");
+    expect(() => parseArtifactCommand({ command: "validate", artifactId: "artifact-1", sha256: "short" })).toThrow("BAD_COMMAND");
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
