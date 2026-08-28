@@ -33,6 +33,14 @@ describe("control plane boundary", () => {
     expect(response.status).toBe(404);
   });
 
+  it("accepts the Vercel control token with standard Bearer whitespace", async () => {
+    const request = new Request("https://control.example/internal/v1/jobs/commands", {
+      method: "POST", headers: { Authorization: "Bearer test-control-token" }, body: JSON.stringify({ command: "drop" }),
+    });
+    const response = await handleControlPlaneRequest(request, environment());
+    expect(response.status).toBe(400);
+  });
+
   it("accepts only typed gateway commands before any D1 statement is issued", () => {
     expect(parseJobCommand({ command: "list", ownerId: "access-user@example.test" })).toEqual({ command: "list", ownerId: "access-user@example.test" });
     expect(() => parseJobCommand({ command: "drop", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");

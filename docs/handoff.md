@@ -25,7 +25,8 @@
 -  進行中: control-planeに内部token限定の`list/read/cancel/delete` command gatewayを追加した。owner IDを
   必須入力にし、全job読取・更新を`owner_id`条件で限定する。`create`も追加し、受付停止、Cloudflare
   budget、許可model、月次/日次quota、active job、idempotencyを判定してjob/revision/reservation/dispatchを
-  D1 batchで作成する。型検査、7境界テスト、依存監査は合格した。
+  D1 batchで作成する。local D1 fixtureで初回作成、同一入力の冪等再送、owner-scoped一覧取得を確認した。
+  型検査、8境界テスト、依存監査は合格した。
 - 次の着手: create commandのD1実fixture（許可・拒否・競合）を追加し、webのstate I/Oをgateway clientへ
   段階置換する。
 - Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。

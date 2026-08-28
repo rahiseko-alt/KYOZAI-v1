@@ -19,7 +19,7 @@ function unavailable() {
 }
 
 function isAuthorized(request: Request, token: string | undefined) {
-  const supplied = request.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1]?.trim();
+  const supplied = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   return Boolean(token && supplied && supplied === token);
 }
 

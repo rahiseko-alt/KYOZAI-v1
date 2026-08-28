@@ -1727,3 +1727,23 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
   緩めず、公開後24時間を経過した依存版を選定した。
 - **再発防止**：WindowsでWorker bundleが表示上完了しても、終了コードが非0なら検証不合格として扱い、
   CIの対象OSで再現性を確認する。
+
+## 2026-08-28 local D1 fixtureのJSON SQL引数がPowerShellで壊れた
+
+- **何が起きたか**：`wrangler d1 execute --command`へ渡したJSON配列を含むSQLがPowerShellの引数解釈で分割され、
+  Wranglerはunknown argumentとして停止した。
+- **影響**：直前のlocal D1 migrationは24命令すべて成功したが、system controlの更新は実行されていない。
+  remote D1/R2、Vercel、秘密値、案件データへの影響はない。
+- **修正状況**：値をSQL引数へ直接埋め込まず、JSON関数で表現できる引数へ変更してfixtureを再実行する。
+- **再発防止**：PowerShell経由のWrangler SQLでは、入れ子の引用符を含むliteralを避け、DB側のJSON関数または
+  SQL fileを使用する。
+
+## 2026-08-28 internal Bearer認証が空白を一致していなかった
+
+- **何が起きたか**：local Worker fixtureで正しいinternal tokenを送っても404になった。認証正規表現が
+  正規表現の空白クラスではなく文字列`\\s`を探しており、`Bearer <token>`を一致できなかった。
+- **影響**：internal commandはすべてfail-closedで404となり、D1の書込みは実行されなかった。remote環境、
+  利用者データ、秘密値への影響はない。
+- **修正**：空白クラスを正しく解釈する正規表現へ変更し、正しいBearer headerが400（入力形式エラー）まで
+  到達する境界テストを追加する。
+- **再発防止**：拒否だけでなく、認証済みrequestが次の入力検証段へ到達するテストを必須にする。
