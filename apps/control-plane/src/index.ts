@@ -9,6 +9,7 @@ export type ControlPlaneEnv = {
 };
 
 import { executeJobCommand, JobCommandError, parseJobCommand } from "./job-commands";
+import { executeStageCommand, StageCommandError, parseStageCommand } from "./stage-commands";
 
 type Fetcher = typeof fetch;
 
@@ -77,6 +78,14 @@ export async function handleControlPlaneRequest(request: Request, env: ControlPl
         return Response.json(await executeJobCommand(env.DB, parseJobCommand(body)), { headers: noStore });
       } catch (error) {
         if (error instanceof JobCommandError) return Response.json({ code: error.code }, { status: error.code === "SERVICE_UNAVAILABLE" ? 503 : error.code === "CONFLICT" ? 409 : error.code === "NOT_FOUND" ? 404 : 400, headers: noStore });
+        return unavailable();
+      }
+    }
+    if (request.method === "POST" && pathname === "/internal/v1/stages/commands" && await bindingsReady(env)) {
+      try {
+        return Response.json(await executeStageCommand(env.DB, parseStageCommand(await request.json())), { headers: noStore });
+      } catch (error) {
+        if (error instanceof StageCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : 400, headers: noStore });
         return unavailable();
       }
     }

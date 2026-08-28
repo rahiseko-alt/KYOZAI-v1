@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { handleControlPlaneRequest, invokeScheduler, scheduledKind, type ControlPlaneEnv } from "../src";
 import { executeJobCommand, parseJobCommand } from "../src/job-commands";
+import { parseStageCommand } from "../src/stage-commands";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return {
@@ -65,6 +66,11 @@ describe("control plane boundary", () => {
       command: "create", ownerId: "access-user@example.test", jobId: "job-new", revisionId: "revision-new", dispatchId: "dispatch-new", reservationId: "reservation-new", idempotencyKey: "request-1", inputKind: "text", requestJson: "{\"request\":\"教材にする\"}", imageModel: "gpt-image-1", workflowVersion: "kyozai-workflow@1", now: "2026-08-28T00:00:00.000Z", expiresAt: "2026-09-04T00:00:00.000Z", reservationExpiresAt: "2026-08-29T00:00:00.000Z", reservedImageCalls: 24, reservedCostUnits: 57,
     }));
     expect(result).toEqual({ jobId: "job-original", idempotent: true });
+  });
+
+  it("limits stage leases to the declared recovery window", () => {
+    expect(parseStageCommand({ command: "claim", stageRunId: "stage-1", leaseOwner: "workflow-1", leaseSeconds: 900, now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" }).leaseSeconds).toBe(900);
+    expect(() => parseStageCommand({ command: "claim", stageRunId: "stage-1", leaseOwner: "workflow-1", leaseSeconds: 901, now: "now", leaseExpiresAt: "later" })).toThrow("BAD_COMMAND");
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
