@@ -1715,3 +1715,15 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **修正**：stateを削除して`.gitignore`へ追加し、push前に未push commit履歴をまとめ直してstateを履歴から除外する。
 - **再発防止**：local Workerを起動する前に`.wrangler/`をignoreし、commit前に`git status --short`で
   runtime stateを確認する。
+
+## 2026-08-28 WindowsでWrangler更新後もdry-runが異常終了した
+
+- **何が起きたか**：CI監査で検出された`ws`の高重大度脆弱性を解消するため、Wranglerを4.126.0と
+  互換の`@cloudflare/workers-types` 5.20260825.1へ更新した。型検査、Worker境界テスト、依存監査は
+  合格したが、Windows/Node 24の`wrangler deploy --dry-run`は再びbundle完了後に`0xC0000409`で終了した。
+- **影響**：実配備、Cloudflareリソース操作、Vercel設定、秘密値の表示・共有はない。CIのLinux dry-runは
+  旧版で合格しており、更新版について改めてCIで確認する。
+- **修正状況**：Windowsの異常終了を合格として扱わず、Linux CIでbuildと監査を実証する。供給網ポリシーは
+  緩めず、公開後24時間を経過した依存版を選定した。
+- **再発防止**：WindowsでWorker bundleが表示上完了しても、終了コードが非0なら検証不合格として扱い、
+  CIの対象OSで再現性を確認する。

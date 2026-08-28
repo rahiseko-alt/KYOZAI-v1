@@ -1,6 +1,6 @@
 # KYOZAI handoff
 
-更新: 2026-08-27
+更新: 2026-08-28
 
 ## 現在のGate
 
@@ -21,6 +21,7 @@
 - 完了: `apps/control-plane`にD1初期schema、private R2 binding、5分dispatch/6時間cleanup Cron、
   内部token境界、fail-closed healthを追加した。control-plane型検査、4境界テスト、local D1 migration、
   local `/health`=200（`acceptingNewJobs:false`）、web typecheck/lint、web 158 testsは合格した。
+  Wrangler 4.126.0へ更新し、依存監査は脆弱性0件で合格している。
 - 次の着手: control-planeへjob create/list/read/cancel/deleteの型付きcommandを、既存Postgres RPCと同じ
   transaction・所有者隠蔽・idempotency契約で移植し、webのstate I/Oをgateway clientへ段階置換する。
 - Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。
