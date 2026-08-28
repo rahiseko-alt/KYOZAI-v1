@@ -4,6 +4,7 @@ import { handleControlPlaneRequest, invokeScheduler, scheduledKind, type Control
 import { executeJobCommand, parseJobCommand } from "../src/job-commands";
 import { parseStageCommand } from "../src/stage-commands";
 import { parseArtifactCommand } from "../src/artifact-commands";
+import { putArtifactBytes } from "../src/artifact-objects";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return {
@@ -85,6 +86,15 @@ describe("control plane boundary", () => {
   it("accepts only checksummed artifact finalization commands", () => {
     expect(parseArtifactCommand({ command: "validate", artifactId: "artifact-1", sha256: "a".repeat(64) }).command).toBe("validate");
     expect(() => parseArtifactCommand({ command: "validate", artifactId: "artifact-1", sha256: "short" })).toThrow("BAD_COMMAND");
+  });
+
+  it("stores draft bytes privately and verifies the declared R2 byte size", async () => {
+    const put = vi.fn(async () => undefined);
+    const head = vi.fn(async () => ({ size: 3 }));
+    const db = { prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first: vi.fn(async () => ({ storage_bucket: "kyozai-artifacts", storage_path: "fixture/path", media_type: "text/plain", byte_size: 3 })) })) })) } as unknown as D1Database;
+    const result = await putArtifactBytes(new Request("https://control.example/internal/v1/artifacts/artifact-1/bytes", { method: "PUT", body: "abc" }), db, { put, head } as unknown as R2Bucket, { put, head } as unknown as R2Bucket);
+    expect(result).toEqual({ artifactId: "artifact-1", byteSize: 3 });
+    expect(put).toHaveBeenCalledWith("fixture/path", expect.any(ReadableStream), expect.any(Object));
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
