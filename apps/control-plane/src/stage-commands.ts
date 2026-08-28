@@ -1,6 +1,7 @@
 type Row = Record<string, unknown>;
 
 export type StageCommand =
+  | { command: "findPassedArtifact"; jobId: string; revisionId: string; stage: string; slideNumber: number }
   | { command: "ensure"; stageRunId: string; jobId: string; revisionId: string; stage: string; slideNumber: number; validator: string; model?: string; now: string }
   | { command: "claim"; stageRunId: string; leaseOwner: string; leaseSeconds: number; now: string; leaseExpiresAt: string }
   | { command: "pass"; stageRunId: string; leaseOwner: string; outputArtifactIds: string[]; validator: string; usageJson: string; now: string }
@@ -13,6 +14,10 @@ const ids = (value: unknown) => { if (!Array.isArray(value) || value.length > 50
 export function parseStageCommand(value: unknown): StageCommand {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new StageCommandError("BAD_COMMAND");
   const x = value as Record<string, unknown>;
+  if (x.command === "findPassedArtifact") {
+    if (typeof x.slideNumber !== "number" || !Number.isInteger(x.slideNumber) || x.slideNumber < 0) throw new StageCommandError("BAD_COMMAND");
+    return { command: "findPassedArtifact", jobId: text(x.jobId), revisionId: text(x.revisionId), stage: text(x.stage), slideNumber: x.slideNumber };
+  }
   if (x.command === "ensure") {
     if (typeof x.slideNumber !== "number" || !Number.isInteger(x.slideNumber) || x.slideNumber < 0) throw new StageCommandError("BAD_COMMAND");
     const model = x.model === undefined ? undefined : text(x.model);
@@ -39,6 +44,12 @@ async function ensure(db: D1Database, x: Extract<StageCommand, { command: "ensur
   return { stage: { id: x.stageRunId, attempt: 0, status: "pending" }, created: true };
 }
 
+async function findPassedArtifact(db: D1Database, x: Extract<StageCommand, { command: "findPassedArtifact" }>) {
+  const row = await db.prepare("SELECT a.id FROM stage_runs s JOIN json_each(s.output_artifact_ids_json) output ON 1 = 1 JOIN artifacts a ON a.id = output.value WHERE s.job_id = ? AND s.revision_id = ? AND s.stage = ? AND s.slide_number = ? AND s.status = 'passed' AND a.lifecycle IN ('validated', 'final') ORDER BY s.attempt DESC LIMIT 1")
+    .bind(x.jobId, x.revisionId, x.stage, x.slideNumber).first<{ id: string }>();
+  return { artifactId: row?.id };
+}
+
 async function claim(db: D1Database, x: Extract<StageCommand, { command: "claim" }>) {
   const out = await db.batch([db.prepare("UPDATE stage_runs SET status = 'running', lease_owner = ?, lease_expires_at = ?, started_at = COALESCE(started_at, ?) WHERE id = ? AND (status = 'pending' OR (status = 'running' AND lease_expires_at < ?)) AND EXISTS (SELECT 1 FROM jobs WHERE jobs.id = stage_runs.job_id AND jobs.status IN ('queued', 'running'))").bind(x.leaseOwner, x.leaseExpiresAt, x.now, x.stageRunId, x.now), db.prepare("UPDATE jobs SET status = 'running', current_stage = (SELECT stage FROM stage_runs WHERE id = ?), updated_at = ? WHERE id = (SELECT job_id FROM stage_runs WHERE id = ? AND status = 'running' AND lease_owner = ?)").bind(x.stageRunId, x.now, x.stageRunId, x.leaseOwner)]);
   if (out[0].meta.changes !== 1) throw new StageCommandError("CONFLICT"); return { stage: await db.prepare("SELECT id, job_id, revision_id, stage, slide_number, attempt, lease_expires_at FROM stage_runs WHERE id = ? AND lease_owner = ?").bind(x.stageRunId, x.leaseOwner).first() };
@@ -60,4 +71,4 @@ async function fail(db: D1Database, x: Extract<StageCommand, { command: "fail" }
   if (result[0].meta.changes !== 1) throw new StageCommandError("CONFLICT"); return { retryStageRunId: retry ? x.retryStageRunId : undefined };
 }
 
-export async function executeStageCommand(db: D1Database, x: StageCommand) { if (x.command === "ensure") return ensure(db, x); if (x.command === "claim") return claim(db, x); if (x.command === "pass") return pass(db, x); return fail(db, x); }
+export async function executeStageCommand(db: D1Database, x: StageCommand) { if (x.command === "findPassedArtifact") return findPassedArtifact(db, x); if (x.command === "ensure") return ensure(db, x); if (x.command === "claim") return claim(db, x); if (x.command === "pass") return pass(db, x); return fail(db, x); }

@@ -1806,3 +1806,11 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：fixture stateだけで起き、provider実呼出し、remote D1/R2、秘密値への影響はない。
 - **修正**：insertが例外なく完了したことを初回reservation成功とし、unique conflict時だけ既存rowを読んで再送扱いにする。
 - **再発防止**：D1 triggerのあるcommandでは、各DMLのreturned change countを成功契約へ使わない。
+
+## 2026-08-28 PowerShell経由のartifact fixture SQLがJSON引用で分割された
+
+- **何が起きたか**：local D1のartifact read fixtureを`--command`で実行した際、metadataとoutput IDのJSON literalが
+  PowerShell引数解釈で分割され、WranglerはSQLを実行せずunknown argumentで停止した。
+- **影響**：fixture DBへの書込みはなく、remote D1/R2、provider、秘密値への影響はない。
+- **修正**：JSONを含むD1 fixtureはSQL fileへ置き、`--file`で実行する。
+- **再発防止**：PowerShellからWranglerへJSONを含むSQLを渡す場合はinline commandを使わない。
