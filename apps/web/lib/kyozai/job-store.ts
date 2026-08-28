@@ -174,7 +174,8 @@ export async function createJob(user: AuthenticatedJobUser, raw: CreateJobReques
   return String(data);
 }
 
-function snapshotFromRows(job: Record<string, unknown>, revision: Record<string, unknown>, stages: Array<Record<string, unknown>>, artifacts: Array<Record<string, unknown>>): KyozaiJobSnapshot {
+/** Decodes the D1 row representation used by the private Cloudflare gateway. */
+export function snapshotFromRows(job: Record<string, unknown>, revision: Record<string, unknown>, stages: Array<Record<string, unknown>>, artifacts: Array<Record<string, unknown>>): KyozaiJobSnapshot {
   const currentStage = typeof job.current_stage === "string" && isKyozaiJobStage(job.current_stage) ? job.current_stage : undefined;
   return {
     id: String(job.id), status: String(job.status) as KyozaiJobSnapshot["status"], currentStage,
