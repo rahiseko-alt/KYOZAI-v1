@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS workflow_dispatches (
   id TEXT PRIMARY KEY,
   job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
   revision_id TEXT NOT NULL REFERENCES job_revisions(id) ON DELETE CASCADE,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'dispatched', 'failed', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'dispatched', 'completed', 'failed', 'cancelled')),
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   last_error_code TEXT,
   next_attempt_at TEXT NOT NULL,
@@ -160,6 +160,8 @@ CREATE TABLE IF NOT EXISTS workflow_dispatches (
   workflow_run_id TEXT,
   lease_owner TEXT,
   lease_expires_at TEXT,
+  started_at TEXT,
+  completed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

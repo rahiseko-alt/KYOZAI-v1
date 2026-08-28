@@ -30,7 +30,7 @@
   型検査、8境界テスト、依存監査は合格した。
 - 次の着手: create commandのD1実fixture（許可・拒否・競合）を追加し、webのstate I/Oをgateway clientへ
   段階置換する。stage runのclaim commandを追加し、pending／期限切れleaseだけを原子的にrunningへ遷移させる。
-  local D1 fixtureでclaim responseとjob/stageの同時running遷移、pass後のstarted_at保持・completed_at設定・lease解除、fail/retryのattempt遷移を確認した。artifactのdraft登録・checksum validation・final昇格command、private R2 streaming upload/downloadを追加した。draft readbackはinternal token限定のVercel Workflowだけに許可する。次はWorkflow clientでR2 readback hash検証を接続する。Webにはserver-onlyのcontrol-plane clientを追加済みで、tokenをブラウザーへ渡さず、
+  local D1 fixtureでclaim responseとjob/stageの同時running遷移、pass後のstarted_at保持・completed_at設定・lease解除、fail/retryのattempt遷移を確認した。artifactのdraft登録・checksum validation・final昇格command、private R2 streaming upload/downloadを追加した。draft readbackはinternal token限定のVercel Workflowだけに許可する。workflow dispatch schemaへcompleted/started/completed timestampsを追加し、local D1 migrationを合格した。次はoutbox commandとWorkflow clientを接続する。Webにはserver-onlyのcontrol-plane clientを追加済みで、tokenをブラウザーへ渡さず、
   通信不成立は503へfail-closedにする。Web全160テスト、型検査、lintは合格した。
 - Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。
 
