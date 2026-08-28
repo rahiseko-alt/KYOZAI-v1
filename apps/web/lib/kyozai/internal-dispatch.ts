@@ -33,8 +33,8 @@ function digest(value: string) {
 }
 
 /**
- * Vercel Cron sends CRON_SECRET as a Bearer credential. Hashing first keeps the
- * timing-safe comparison valid even when a malformed caller supplies a different length.
+ * Supabase scheduler sends CRON_SECRET as a Bearer credential. Hashing first
+ * keeps the timing-safe comparison valid for malformed caller lengths too.
  */
 export function isAuthorizedCronRequest(request: Request, env: Record<string, string | undefined> = process.env) {
   const configuredSecret = env.CRON_SECRET?.trim();

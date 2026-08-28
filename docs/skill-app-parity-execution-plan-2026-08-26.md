@@ -19,7 +19,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 |---|---|---|
 | 空manifest・空QA・工程逆順を検出しない | 実成果物、工程順、時刻、hash、QA内容を検証 | G0 |
 | 実DB・Storage・Workflow・providerの証拠がない | disposable Previewで実Provider縦断を残す | G1 |
-| Cronが配備単位と分離 | 配備される設定へdispatcher／cleanupを統合 | G1 |
+| Vercel 5分Cronは0円運用制約と両立しない | 無料Supabase内schedulerから認証済みdispatcher／cleanupを起動し、Vercel設定にCronを置かない | G1 |
 | stage間cancelが残留 | 全境界でterminalへ確定 | G1 |
 | provider成功直後から回収不能 | 二重課金せず結果を回収・再開 | G1 |
 | 本文、再画像、画像QAを費用計上しない | 全provider試行をusageへ記録 | G1 |
@@ -58,6 +58,41 @@ Production E2E mock遮断、Preview E2E固定値の撤廃、revision所有者先
 この補正で解決済みとなったG4所有者先行確認、G5 Preview E2E固定値、G6 Production E2E mock遮断、
 G6 blind semantic rubricは`shared/kyozai-parity-goal.json`の未解決gapから除外した。外部attestationを伴う
 実package由来は未取得のため、G6 gapとして残す。
+
+## 2026-08-27 0円運用への計画変更
+
+利用者が「サーバーの運用費だけ0円、AI生成API費用は利用者ごとの実費」と決定した。したがって
+Vercel有料planへの変更は選択肢から除外する。G1は、無料Supabase projectで`pg_cron`／`pg_net`を用い、
+認証済みVercel dispatcherとcleanupを起動する構成へ変更する。
+
+この構成の合格証拠は、(1) VercelがCronなしでPreview配備できること、(2) Supabaseからdispatcherと
+cleanupが実行されること、(3) Free tierの上限・停止時に新規provider呼出しをfail-closedで止めること、
+の3点とする。無料枠で利用できない機能が判明した場合、有料化は行わず、受付停止と計画再審議へ戻る。
+
+## 2026-08-27 Cloudflare基盤への方針変更
+
+利用者が、KYOZAIの基盤をSupabaseではなくCloudflareへ変更すると決定した。この決定は直前の
+「無料Supabase projectでschedulerを動かす」方針を置き換える。Supabaseの既存projectを新規に
+作成、再利用、削除する作業は行わない。
+
+G1の基盤は、Cloudflare D1（job・revision・usage等の永続データ）、R2（private artifact）、
+Workers（認証済みdispatcher・cleanup・定期実行）へ置き換える。画面のVercel配備は継続する。
+Supabase Authの代替となる認証方式は、所有者分離を実装する前に選定して記録する。既存の
+Supabase migration、scheduler手順、Supabase依存コードは、Cloudflareの同等実装と実fixtureの
+証拠が得られるまで削除しない。
+
+運用費0円の条件は維持する。Cloudflare Freeの上限を超えた場合は、有料planへ切り替えず、
+provider呼出し前に新規受付をfail-closedで停止する。次セッションの最初の作業は、既存の
+Supabase依存を一覧化し、Cloudflareの対応先、認証境界、migration方式、Preview実証条件を
+G1の実行項目として確定することとする。
+
+### G1 Cloudflare実装設計（2026-08-28）
+
+棚卸しと公式仕様の確認により、Cloudflare Workers Freeの10ms CPU上限では、PDF検査、画像QA、
+ZIP作成をWorkersへ移せないことを確認した。CloudflareはD1/R2/state gateway/Cronを担い、Vercel
+Workflowは重い生成工程を継続する。G1 Previewの認証はCloudflare Access One-time PINとし、
+Vercel APIはAccess JWTを検証して所有者を確定する。詳細、対応表、実装順序、外部設定は
+`docs/g1-cloudflare-foundation-plan-2026-08-28.md` を参照する。
 
 ## 計画外問題
 

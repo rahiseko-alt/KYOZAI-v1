@@ -4,17 +4,27 @@ import { describe, expect, it } from "vitest";
 
 const root = new URL("../../../", import.meta.url);
 const migration = readFileSync(new URL("supabase/migrations/20260826010000_g1_provider_attempts_and_cancellation.sql", root), "utf8");
+const schedulerMigration = readFileSync(new URL("supabase/migrations/20260827010000_kyozai_zero_cost_scheduler.sql", root), "utf8");
 const deployedVercel = JSON.parse(readFileSync(new URL("apps/web/vercel.json", root), "utf8")) as {
   crons?: Array<{ path: string; schedule: string }>;
 };
 
 describe("G1直接入力の信頼性契約", () => {
-  it("実際に配備されるapps/web設定へdispatcherとcleanup Cronを置く", () => {
-    expect(deployedVercel.crons).toEqual([
-      { path: "/api/internal/jobs/dispatch", schedule: "*/5 * * * *" },
-      { path: "/api/internal/jobs/cleanup", schedule: "17 */6 * * *" },
-    ]);
+  it("Vercel Cronを置かず、Supabase schedulerが認証済みdispatcherとcleanupを起動する", () => {
+    expect(deployedVercel.crons).toBeUndefined();
     expect(existsSync(new URL("vercel.json", root))).toBe(false);
+    expect(schedulerMigration).toContain("create extension if not exists pg_cron");
+    expect(schedulerMigration).toContain("create extension if not exists pg_net");
+    expect(schedulerMigration).toContain("create extension if not exists supabase_vault with schema vault");
+    expect(schedulerMigration).toContain("kyozai-zero-cost-dispatch");
+    expect(schedulerMigration).toContain("*/5 * * * *");
+    expect(schedulerMigration).toContain("kyozai-zero-cost-cleanup");
+    expect(schedulerMigration).toContain("17 */6 * * *");
+    expect(schedulerMigration).toContain("vault.decrypted_secrets");
+    expect(schedulerMigration).toContain("kyozai_scheduler_cron_secret");
+    expect(schedulerMigration).toContain("'Authorization', 'Bearer ' || v_cron_secret");
+    expect(schedulerMigration).toContain("return false");
+    expect(schedulerMigration).toContain("grant execute on function public.configure_kyozai_zero_cost_scheduler(text, text) to service_role");
   });
 
   it("本文・画像・画像QAを同じprovider試行状態機械で追跡する", () => {

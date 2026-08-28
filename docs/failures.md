@@ -1627,3 +1627,103 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **修正**：`id`をstringとして明示し、日時はschemaの未登録formatに依存せず、validatorで実際にparse・順序比較する
   方式へ統一した。
 - **再発防止**：Ajv schema追加時はstrict compileと正・負の実データ検証を同じ変更で実行する。
+
+## 2026-08-27 0円scheduler実装の調査で存在しない対象を読んだ
+
+- **何が起きたか**：最初の検索で存在しない`tests` directoryを指定し、続く読取で誤ったmigration名と
+  PowerShellの角括弧pathをそのまま渡したため、対象を取得できなかった。
+- **影響**：読取専用コマンドだけが失敗した。ファイル変更、外部設定、秘密値、実行状態への影響はない。
+- **修正**：実在する`apps/web/tests`とmigration一覧を基準に読み直し、Next.jsのdynamic routeはliteral pathとして扱う。
+- **再発防止**：検索・読取の前に`rg --files`で対象名を確認し、PowerShellではdynamic route pathを`-LiteralPath`で読む。
+
+## 2026-08-27 scheduler変更の検証でNext buildを並列起動した
+
+- **何が起きたか**：先行`next build`の完了前に、buildを含む別の検証を並列に開始した。後続buildは`.next/lock`を
+  検出して停止した。
+- **影響**：後続のローカルbuildだけが不合格になった。実装、外部配備、秘密値、CIへの影響はない。
+- **修正**：起動中のbuildが無いことをprocess command lineで確認し、検証用serverを停止してstale lockを除去した後、
+  build、smoke、E2Eを直列で再実行する。
+- **再発防止**：Next.jsのbuild、smoke、E2Eは同じ`.next`を使うため、これらを並列に起動しない。
+
+## 2026-08-27 build lockの停止方法に関する訂正
+
+- **訂正対象**：直前の「scheduler変更の検証でNext buildを並列起動した」の修正記述。
+- **誤り**：検証用serverを停止してlockを除去したと記録したが、停止・削除コマンドは実行環境の安全制約で拒否された。
+- **正しくは**：その後に起動中processが無く、lockも存在しないことを読取で確認した。理由はプロセスが自然終了したためであり、
+  エージェントが停止・削除したためではない。
+- **影響**：記録の訂正のみ。実装、外部環境、秘密値への影響はない。
+
+## 2026-08-27 Browser Skillの旧cache pathを最初に参照した
+
+- **何が起きたか**：Browser Skillの案内にあるcache pathのversionが現在のinstalled versionと一致せず、最初の読取が失敗した。
+- **影響**：読取専用の失敗だけで、ブラウザ操作、外部設定、秘密値への影響はない。
+- **修正**：installed plugin cacheから現在のversionの`SKILL.md`を特定して読み直した。
+- **再発防止**：plugin cacheを参照する前に、実在するversion directoryを確認する。
+
+## 2026-08-27 外部の鍵生成ページ調査で一時候補値がツール出力へ現れた
+
+- **何が起きたか**：鍵生成ページの安全性を調査した際、ページが自動表示した一時候補値が調査用ツール出力に含まれた。
+- **影響**：その値は運用へ登録・送信・保存しておらず、認証や利用者データへの影響はない。値は引用せず破棄する。
+- **修正**：当該外部ページを運用鍵の生成方法として採用しない。
+- **再発防止**：運用鍵の候補値を自動表示する外部ページはエージェントが開かない。利用者自身がローカルで生成し、エージェントを経由せず直接登録する。
+
+## 2026-08-27 外部の鍵生成ページ調査で候補値をツール出力へ露出した
+
+- **何が起きたか**：外部の鍵生成ページ本文を調査ツールで取得した際、ページがその場で返した候補値がツール出力に含まれた。
+- **影響**：候補値はコピー・保存・環境変数への登録をしておらず、運用の秘密情報ではない。露出経路は調査ツール出力のみである。
+- **修正**：候補値を再表示・引用せず、外部生成サイトを使わないローカル生成手段へ調査方針を切り替えた。
+- **再発防止**：秘密値を扱う調査では、値を含むページ本文を取得せず、公式ドキュメントや仕様ページだけを根拠にする。
+
+## 2026-08-27 Vercelの環境選択を画面確認前に案内した
+
+- **何が起きたか**：Git未接続projectのbranch限定環境変数を、実際のVercel UIで保存できることを確認する前に案内した。
+  UIは保存を拒否し、既存の`CRON_SECRET`がProductionだけへ保存されていることも後から確認した。
+- **影響**：Productionでprovider呼出しは行われず、秘密値の表示・共有もない。誤ったProduction設定は利用者が削除し、
+  新しいSecretをPreviewだけへ登録した。
+- **修正**：新規追加ではなく既存Secretの編集画面を実際に確認し、環境一覧の`Preview`だけを選ぶ手順へ訂正した。
+- **再発防止**：外部UIの設定手順は、公式仕様に加えて同じaccountの入力画面で保存前の選択肢・警告・保存可否を確認してから、
+  1ステップずつ案内する。
+
+## 2026-08-27 Vercelのmonorepo配備境界を誤ってroot配備へ切り替えた
+
+- **何が起きたか**：`apps/web`だけのCLI配備が`shared/`契約を含めず失敗したため、root packageをNext.js projectとして
+  配備する設定へ一時的に切り替えた。root packageにはNext.js dependencyが無く、Vercel buildはframework検出で停止した。
+- **影響**：Preview deploymentが2件不合格になった。Production、provider呼出し、秘密値の表示・共有には影響がない。
+- **修正**：root配備用の設定を戻した。Vercel公式のmonorepo方式どおり、`apps/web`をRoot Directoryに保ち、
+  親`shared/`をBuild対象へ含めるproject設定を確認してから再配備する。
+- **再発防止**：monorepoの外部importは、framework検出だけでrootへ移さず、Root Directoryとsource-inclusionの
+  platform設定を公式仕様で先に確認する。
+
+## 2026-08-28 Windows/Node 24でWrangler dry-runがbundle後に異常終了した
+
+- **何が起きたか**：`apps/control-plane`の`wrangler deploy --dry-run`は、TypeScript bundleとD1/R2 bindingの
+  解決を完了して`--dry-run: exiting now.`を表示した後、Windows上でexit status `0xC0000409`となった。
+  Wranglerを4.110.0から4.100.0へ下げても再現した。
+- **影響**：Cloudflareへの実配備、D1/R2の実操作、Vercel設定、秘密値の表示・共有は行われていない。
+  local D1 migration、control-planeの型検査、境界テストは別途合格している。
+- **修正状況**：dry-runを成功として扱わず、Windows/Node 24とWranglerの互換性として切り分けを継続する。
+  deploy前にはCIまたはCloudflare実行環境で同じdry-runを再実行する。
+- **再発防止**：Workerのローカル検証は型検査、契約テスト、local D1 migration、dry-runを独立して記録し、
+  bundle後のプロセス異常をbuild成功と読み替えない。
+
+## 2026-08-28 local Worker stateを初回commitへ含めた
+
+- **何が起きたか**：control-planeのlocal D1/R2検証で生成された`apps/control-plane/.wrangler/`を
+  ignoreする前に初回commitへ含めた。
+- **影響**：含まれたのは空のlocal schema/cacheとbundle一時出力だけで、案件データ、運用設定、秘密値はない。
+  当該commitはpushしていない。
+- **修正**：stateを削除して`.gitignore`へ追加し、push前に未push commit履歴をまとめ直してstateを履歴から除外する。
+- **再発防止**：local Workerを起動する前に`.wrangler/`をignoreし、commit前に`git status --short`で
+  runtime stateを確認する。
+
+## 2026-08-28 WindowsでWrangler更新後もdry-runが異常終了した
+
+- **何が起きたか**：CI監査で検出された`ws`の高重大度脆弱性を解消するため、Wranglerを4.126.0と
+  互換の`@cloudflare/workers-types` 5.20260825.1へ更新した。型検査、Worker境界テスト、依存監査は
+  合格したが、Windows/Node 24の`wrangler deploy --dry-run`は再びbundle完了後に`0xC0000409`で終了した。
+- **影響**：実配備、Cloudflareリソース操作、Vercel設定、秘密値の表示・共有はない。CIのLinux dry-runは
+  旧版で合格しており、更新版について改めてCIで確認する。
+- **修正状況**：Windowsの異常終了を合格として扱わず、Linux CIでbuildと監査を実証する。供給網ポリシーは
+  緩めず、公開後24時間を経過した依存版を選定した。
+- **再発防止**：WindowsでWorker bundleが表示上完了しても、終了コードが非0なら検証不合格として扱い、
+  CIの対象OSで再現性を確認する。
