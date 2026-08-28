@@ -1814,3 +1814,11 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：fixture DBへの書込みはなく、remote D1/R2、provider、秘密値への影響はない。
 - **修正**：JSONを含むD1 fixtureはSQL fileへ置き、`--file`で実行する。
 - **再発防止**：PowerShellからWranglerへJSONを含むSQLを渡す場合はinline commandを使わない。
+
+## 2026-08-28 Workflow helperがファイル行数上限を超えた
+
+- **何が起きたか**：private R2 artifact処理を`job-workflow.ts`へ追加した結果、CIのlintでファイルが314行となり、
+  `max-lines`の300行制約により失敗した。
+- **影響**：型検査までは合格しており、CIはlint時点で停止した。remote D1/R2、Vercel、provider、秘密値への影響はない。
+- **修正**：artifactの永続化・readback・既存画像復元を単独の`job-workflow-artifacts.ts`へ分離した。
+- **再発防止**：workflow組立ファイルへstorage実装を積み増さず、単独で変更・検証される責務ごとに分ける。
