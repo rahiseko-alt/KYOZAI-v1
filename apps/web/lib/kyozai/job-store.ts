@@ -3,6 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { isKyozaiJobStage, type ArtifactManifestEntry, type StageLedgerEntry } from "../../../../shared/kyozai-job-contract";
 
 import { createServerSupabaseClient } from "../supabase/server";
+import { cloudflareStateEnabled, sendControlPlaneJobCommand } from "./control-plane-client";
+import { parsedObject, stringArray } from "./job-store-values";
 import { assertSafePdf, PdfInputError, pdfLimits } from "./pdf-safety";
 import { badRequest, conflict, payloadTooLarge, PublicHttpError, routeUnavailable } from "./http-errors";
 import type { AuthenticatedJobUser } from "./job-auth";
@@ -133,9 +135,25 @@ async function finalizeUploads(user: AuthenticatedJobUser, attachmentIds: string
 export async function createJob(user: AuthenticatedJobUser, raw: CreateJobRequest, idempotencyKey: string) {
   if (!idempotencyKey || idempotencyKey.length > 200) throw badRequest("Idempotency-Keyを指定してください。");
   const request = validateCreateRequest(raw);
+  const inputKind = classifyInput(request);
+  if (cloudflareStateEnabled()) {
+    // G1 proves direct text first. Upload, URL and mixed input remain closed
+    // until their D1/R2 provenance implementation is verified in later Gates.
+    if (inputKind !== "text" || (request.attachmentIds?.length ?? 0) !== 0 || request.sourceUrl) {
+      throw new PublicHttpError(503, "SERVICE_UNAVAILABLE", "この入力形式は現在準備中です。", 60);
+    }
+    const now = new Date();
+    const created = await sendControlPlaneJobCommand<{ jobId: string }>({
+      command: "create", ownerId: user.id, jobId: randomUUID(), revisionId: randomUUID(), dispatchId: randomUUID(), reservationId: randomUUID(),
+      idempotencyKey, inputKind, requestJson: JSON.stringify({ request: request.request, sourceText: request.sourceText, sourceUrl: null, attachmentIds: [] }),
+      imageModel: request.imageModel, workflowVersion: "kyozai-workflow@1", now: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60_000).toISOString(), reservationExpiresAt: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
+      reservedImageCalls: 24, reservedCostUnits: 57,
+    });
+    return created.jobId;
+  }
   await finalizeUploads(user, request.attachmentIds ?? []);
   const supabase = createServerSupabaseClient();
-  const inputKind = classifyInput(request);
   const { data, error } = await supabase.rpc("create_kyozai_job", {
     p_owner_id: user.id,
     p_idempotency_key: idempotencyKey,
@@ -156,10 +174,6 @@ export async function createJob(user: AuthenticatedJobUser, raw: CreateJobReques
   return String(data);
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
 function snapshotFromRows(job: Record<string, unknown>, revision: Record<string, unknown>, stages: Array<Record<string, unknown>>, artifacts: Array<Record<string, unknown>>): KyozaiJobSnapshot {
   const currentStage = typeof job.current_stage === "string" && isKyozaiJobStage(job.current_stage) ? job.current_stage : undefined;
   return {
@@ -176,7 +190,7 @@ function snapshotFromRows(job: Record<string, unknown>, revision: Record<string,
       outputArtifactIds: stringArray(stage.output_artifact_ids),
       validator: String(stage.validator),
       ...(typeof stage.model === "string" ? { model: stage.model } : {}),
-      ...(stage.usage && typeof stage.usage === "object" ? { usage: stage.usage as StageLedgerEntry["usage"] } : {}),
+      ...(parsedObject(stage.usage ?? stage.usage_json) ? { usage: parsedObject(stage.usage ?? stage.usage_json) as StageLedgerEntry["usage"] } : {}),
       ...(typeof stage.retry_reason === "string" ? { retryReason: stage.retry_reason } : {}),
       ...(typeof stage.error_code === "string" ? { errorCode: stage.error_code } : {}),
     })),
@@ -198,6 +212,10 @@ function snapshotFromRows(job: Record<string, unknown>, revision: Record<string,
 
 export async function getJobSnapshot(user: AuthenticatedJobUser, jobId: string) {
   assertUuid(jobId, "jobを確認できません。");
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneJobCommand<{ job: Record<string, unknown>; revision: Record<string, unknown>; stages: Array<Record<string, unknown>>; artifacts: Array<Record<string, unknown>> }>({ command: "read", ownerId: user.id, jobId });
+    return snapshotFromRows(result.job, result.revision, result.stages, result.artifacts);
+  }
   const supabase = createServerSupabaseClient();
   const { data: job, error } = await supabase.from("jobs").select("*").eq("id", jobId).eq("owner_id", user.id).maybeSingle();
   if (error) throw new Error("job_read_failed");
@@ -216,6 +234,10 @@ export async function getJobSnapshot(user: AuthenticatedJobUser, jobId: string) 
 }
 
 export async function listJobs(user: AuthenticatedJobUser) {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneJobCommand<{ jobs: Array<Record<string, unknown>> }>({ command: "list", ownerId: user.id });
+    return result.jobs.map((job) => ({ id: String(job.id), status: String(job.status) as KyozaiJobSnapshot["status"], currentStage: isKyozaiJobStage(String(job.current_stage)) ? String(job.current_stage) : undefined, revision: Number(job.active_revision_number), ...(typeof job.error_code === "string" ? { errorCode: job.error_code } : {}) }));
+  }
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("jobs").select("id, status, current_stage, active_revision_number, error_code").eq("owner_id", user.id).is("deleted_at", null).order("created_at", { ascending: false }).limit(50);
   if (error) throw new Error("job_list_failed");
@@ -224,6 +246,10 @@ export async function listJobs(user: AuthenticatedJobUser) {
 
 export async function cancelJob(user: AuthenticatedJobUser, jobId: string) {
   assertUuid(jobId, "jobを確認できません。");
+  if (cloudflareStateEnabled()) {
+    await sendControlPlaneJobCommand({ command: "cancel", ownerId: user.id, jobId, now: new Date().toISOString() });
+    return;
+  }
   const supabase = createServerSupabaseClient();
   const { data: owned, error: ownershipError } = await supabase.from("jobs").select("id").eq("id", jobId).eq("owner_id", user.id).maybeSingle();
   if (ownershipError) throw new Error("job_cancel_owner_check_failed");
@@ -235,6 +261,10 @@ export async function cancelJob(user: AuthenticatedJobUser, jobId: string) {
 
 export async function deleteJob(user: AuthenticatedJobUser, jobId: string) {
   assertUuid(jobId, "jobを確認できません。");
+  if (cloudflareStateEnabled()) {
+    await sendControlPlaneJobCommand({ command: "delete", ownerId: user.id, jobId, now: new Date().toISOString() });
+    return;
+  }
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("jobs").update({ status: "deleting", deleted_at: new Date().toISOString() }).eq("id", jobId).eq("owner_id", user.id).not("status", "in", "(running,cancelling)").select("id").maybeSingle();
   if (error) throw new Error("job_delete_failed");
