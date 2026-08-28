@@ -5,7 +5,7 @@ import { executeJobCommand, parseJobCommand } from "../src/job-commands";
 import { parseStageCommand } from "../src/stage-commands";
 import { parseArtifactCommand } from "../src/artifact-commands";
 import { putArtifactBytes } from "../src/artifact-objects";
-import { parseDispatchCommand } from "../src/dispatch-commands";
+import { executeDispatchCommand, parseDispatchCommand } from "../src/dispatch-commands";
 import { parseProviderCommand } from "../src/provider-commands";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
@@ -110,6 +110,17 @@ describe("control plane boundary", () => {
   it("accepts only typed workflow dispatch lease commands", () => {
     expect(parseDispatchCommand({ command: "claim", leaseOwner: "cron-1", now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" }).command).toBe("claim");
     expect(() => parseDispatchCommand({ command: "requeue", dispatchId: "d-1", leaseOwner: "cron-1", errorCode: "start_failed", now: "now" })).toThrow("BAD_COMMAND");
+  });
+
+  it("fails the dispatched revision with the job after the retry budget is exhausted", async () => {
+    const bind = vi.fn(() => ({ run: vi.fn(async () => ({ meta: { changes: 1 } })) }));
+    const prepare = vi.fn(() => ({ bind }));
+    const batch = vi.fn(async () => [{ meta: { changes: 1 } }, { meta: { changes: 1 } }, { meta: { changes: 1 } }]);
+    await expect(executeDispatchCommand({ prepare, batch } as unknown as D1Database, {
+      command: "requeue", dispatchId: "dispatch-1", leaseOwner: "lease-1", errorCode: "workflow_start_failed", now: "2026-08-28T00:00:00.000Z", nextAttemptAt: "2026-08-28T00:00:30.000Z",
+    })).resolves.toEqual({ requeued: true });
+    expect(prepare).toHaveBeenCalledWith(expect.stringContaining("UPDATE job_revisions SET status = 'failed'"));
+    expect(batch).toHaveBeenCalledWith(expect.arrayContaining([expect.anything(), expect.anything(), expect.anything()]));
   });
 
   it("requires a checkpoint before provider usage can be confirmed", () => {

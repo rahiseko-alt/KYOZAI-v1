@@ -16,8 +16,8 @@ CREATE TABLE workflow_dispatches_rebuilt (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-INSERT INTO workflow_dispatches_rebuilt (id, job_id, revision_id, status, attempts, last_error_code, next_attempt_at, dispatched_at, workflow_run_id, lease_owner, lease_expires_at, created_at, updated_at)
-  SELECT id, job_id, revision_id, status, attempts, last_error_code, next_attempt_at, dispatched_at, workflow_run_id, lease_owner, lease_expires_at, created_at, updated_at FROM workflow_dispatches;
+INSERT INTO workflow_dispatches_rebuilt (id, job_id, revision_id, status, attempts, last_error_code, next_attempt_at, dispatched_at, workflow_run_id, lease_owner, lease_expires_at, started_at, completed_at, created_at, updated_at)
+  SELECT id, job_id, revision_id, status, attempts, last_error_code, next_attempt_at, dispatched_at, workflow_run_id, lease_owner, lease_expires_at, started_at, completed_at, created_at, updated_at FROM workflow_dispatches;
 DROP TABLE workflow_dispatches;
 ALTER TABLE workflow_dispatches_rebuilt RENAME TO workflow_dispatches;
 CREATE INDEX workflow_dispatches_ready_idx ON workflow_dispatches (status, next_attempt_at);
