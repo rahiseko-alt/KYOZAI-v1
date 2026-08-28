@@ -22,8 +22,10 @@
   内部token境界、fail-closed healthを追加した。control-plane型検査、4境界テスト、local D1 migration、
   local `/health`=200（`acceptingNewJobs:false`）、web typecheck/lint、web 158 testsは合格した。
   Wrangler 4.126.0へ更新し、依存監査は脆弱性0件で合格している。
-- 次の着手: control-planeへjob create/list/read/cancel/deleteの型付きcommandを、既存Postgres RPCと同じ
-  transaction・所有者隠蔽・idempotency契約で移植し、webのstate I/Oをgateway clientへ段階置換する。
+-  進行中: control-planeに内部token限定の`list/read/cancel/delete` command gatewayを追加した。owner IDを
+  必須入力にし、全job読取・更新を`owner_id`条件で限定する。型検査、6境界テスト、依存監査は合格した。
+- 次の着手: create commandを、既存Postgres RPCと同じtransaction・所有者隠蔽・idempotency・quota契約で
+  移植し、その後webのstate I/Oをgateway clientへ段階置換する。
 - Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。
 
 ## 外部ブロッカー

@@ -8,6 +8,8 @@ export type ControlPlaneEnv = {
   VERCEL_CLEANUP_URL?: string;
 };
 
+import { executeJobCommand, JobCommandError, parseJobCommand } from "./job-commands";
+
 type Fetcher = typeof fetch;
 
 const noStore = { "Cache-Control": "no-store" };
@@ -69,6 +71,15 @@ export async function handleControlPlaneRequest(request: Request, env: ControlPl
   if (request.method === "GET" && pathname === "/health") return health(env);
   if (pathname.startsWith("/internal/")) {
     if (!isAuthorized(request, env.KYOZAI_CONTROL_PLANE_TOKEN)) return new Response(null, { status: 404, headers: noStore });
+    if (request.method === "POST" && pathname === "/internal/v1/jobs/commands" && await bindingsReady(env)) {
+      try {
+        const body = await request.json();
+        return Response.json(await executeJobCommand(env.DB, parseJobCommand(body)), { headers: noStore });
+      } catch (error) {
+        if (error instanceof JobCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : error.code === "NOT_FOUND" ? 404 : 400, headers: noStore });
+        return unavailable();
+      }
+    }
     return unavailable();
   }
   return new Response(null, { status: 404, headers: noStore });

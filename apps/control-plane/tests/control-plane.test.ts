@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { handleControlPlaneRequest, invokeScheduler, scheduledKind, type ControlPlaneEnv } from "../src";
+import { executeJobCommand, parseJobCommand } from "../src/job-commands";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return {
@@ -30,6 +31,22 @@ describe("control plane boundary", () => {
     const request = new Request("https://control.example/internal/v1/jobs", { method: "POST" });
     const response = await handleControlPlaneRequest(request, environment());
     expect(response.status).toBe(404);
+  });
+
+  it("accepts only typed gateway commands before any D1 statement is issued", () => {
+    expect(parseJobCommand({ command: "list", ownerId: "access-user@example.test" })).toEqual({ command: "list", ownerId: "access-user@example.test" });
+    expect(() => parseJobCommand({ command: "drop", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");
+    expect(() => parseJobCommand({ command: "read", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");
+  });
+
+  it("lists jobs through the gateway with an owner-scoped D1 query", async () => {
+    const all = vi.fn(async () => ({ results: [{ id: "job-1", status: "queued" }] }));
+    const bind = vi.fn(() => ({ all }));
+    const prepare = vi.fn(() => ({ bind }));
+    const result = await executeJobCommand({ prepare } as unknown as D1Database, { command: "list", ownerId: "access-user@example.test" });
+    expect(result).toEqual({ jobs: [{ id: "job-1", status: "queued" }] });
+    expect(prepare).toHaveBeenCalledWith(expect.stringContaining("owner_id = ?"));
+    expect(bind).toHaveBeenCalledWith("access-user@example.test");
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
