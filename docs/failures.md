@@ -1693,3 +1693,25 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
   親`shared/`をBuild対象へ含めるproject設定を確認してから再配備する。
 - **再発防止**：monorepoの外部importは、framework検出だけでrootへ移さず、Root Directoryとsource-inclusionの
   platform設定を公式仕様で先に確認する。
+
+## 2026-08-28 Windows/Node 24でWrangler dry-runがbundle後に異常終了した
+
+- **何が起きたか**：`apps/control-plane`の`wrangler deploy --dry-run`は、TypeScript bundleとD1/R2 bindingの
+  解決を完了して`--dry-run: exiting now.`を表示した後、Windows上でexit status `0xC0000409`となった。
+  Wranglerを4.110.0から4.100.0へ下げても再現した。
+- **影響**：Cloudflareへの実配備、D1/R2の実操作、Vercel設定、秘密値の表示・共有は行われていない。
+  local D1 migration、control-planeの型検査、境界テストは別途合格している。
+- **修正状況**：dry-runを成功として扱わず、Windows/Node 24とWranglerの互換性として切り分けを継続する。
+  deploy前にはCIまたはCloudflare実行環境で同じdry-runを再実行する。
+- **再発防止**：Workerのローカル検証は型検査、契約テスト、local D1 migration、dry-runを独立して記録し、
+  bundle後のプロセス異常をbuild成功と読み替えない。
+
+## 2026-08-28 local Worker stateを初回commitへ含めた
+
+- **何が起きたか**：control-planeのlocal D1/R2検証で生成された`apps/control-plane/.wrangler/`を
+  ignoreする前に初回commitへ含めた。
+- **影響**：含まれたのは空のlocal schema/cacheとbundle一時出力だけで、案件データ、運用設定、秘密値はない。
+  当該commitはpushしていない。
+- **修正**：stateを削除して`.gitignore`へ追加し、push前に未push commit履歴をまとめ直してstateを履歴から除外する。
+- **再発防止**：local Workerを起動する前に`.wrangler/`をignoreし、commit前に`git status --short`で
+  runtime stateを確認する。

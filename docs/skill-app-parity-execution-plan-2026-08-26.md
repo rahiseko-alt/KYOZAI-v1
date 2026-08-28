@@ -86,6 +86,14 @@ provider呼出し前に新規受付をfail-closedで停止する。次セッシ�
 Supabase依存を一覧化し、Cloudflareの対応先、認証境界、migration方式、Preview実証条件を
 G1の実行項目として確定することとする。
 
+### G1 Cloudflare実装設計（2026-08-28）
+
+棚卸しと公式仕様の確認により、Cloudflare Workers Freeの10ms CPU上限では、PDF検査、画像QA、
+ZIP作成をWorkersへ移せないことを確認した。CloudflareはD1/R2/state gateway/Cronを担い、Vercel
+Workflowは重い生成工程を継続する。G1 Previewの認証はCloudflare Access One-time PINとし、
+Vercel APIはAccess JWTを検証して所有者を確定する。詳細、対応表、実装順序、外部設定は
+`docs/g1-cloudflare-foundation-plan-2026-08-28.md` を参照する。
+
 ## 計画外問題
 
 現Gateの合格を妨げず、秘密情報、所有者分離、費用上限、データ消失、証拠の正当性を

@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "kyozai-control-plane",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-11",
+  "workers_dev": true,
+  "observability": {
+    "enabled": false
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *", "17 */6 * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kyozai-preview",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SOURCE_BUCKET",
+      "bucket_name": "kyozai-preview-sources"
+    },
+    {
+      "binding": "ARTIFACT_BUCKET",
+      "bucket_name": "kyozai-preview-artifacts"
+    }
+  ]
+}

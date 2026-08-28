@@ -15,11 +15,21 @@
 
 - 利用者決定: Supabase基盤は採用しない。Cloudflare D1、R2、Workersへ変更し、Vercelは画面配備に維持する。
 - 運用費は0円、AI生成API費用だけを利用者ごとの実費とする。Free上限超過時は有料化せず、新規受付をfail-closedで停止する。
-- 次の着手: Supabase依存の棚卸し、Cloudflare対応先、認証方式、所有者分離、データ移行、Preview実証条件をG1計画へ確定する。
+- G1実装設計: `docs/g1-cloudflare-foundation-plan-2026-08-28.md`。Workers Freeの10ms CPU制約により、
+  CloudflareはD1/R2/state gateway/Cron、Vercel Workflowは重い生成工程を担当する。Preview認証は
+  Cloudflare Access One-time PINとし、Vercel APIでAccess JWTを検証する。
+- 完了: `apps/control-plane`にD1初期schema、private R2 binding、5分dispatch/6時間cleanup Cron、
+  内部token境界、fail-closed healthを追加した。control-plane型検査、4境界テスト、local D1 migration、
+  local `/health`=200（`acceptingNewJobs:false`）、web typecheck/lint、web 158 testsは合格した。
+- 次の着手: control-planeへjob create/list/read/cancel/deleteの型付きcommandを、既存Postgres RPCと同じ
+  transaction・所有者隠蔽・idempotency契約で移植し、webのstate I/Oをgateway clientへ段階置換する。
 - Supabase migration、scheduler手順、依存コードはCloudflareの同等実装が実証されるまで削除しない。
 
 ## 外部ブロッカー
 
 - Cloudflare account、D1 database、R2 private bucket、Workersの実行設定は未作成。
-- Supabase Authの代替となる認証方式は未決定であり、所有者分離の実装前に選定が必要。
+- Cloudflare Access One-time PINを採用済みだが、Zero Trust organization、許可リスト、Access application、
+  Vercel Previewを通す正規hostnameは未設定である。
 - Vercel PreviewはReadyだが、Cloudflare基盤の実証に必要な環境変数は未登録。
+- Windows/Node 24では`wrangler deploy --dry-run`がbundleとbinding解決後に`0xC0000409`で異常終了する。
+  local D1 migrationとlocal Worker起動は合格しているが、Cloudflare実行環境またはCIでdry-runを再検証する。

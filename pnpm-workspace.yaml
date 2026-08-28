@@ -10,6 +10,7 @@ allowBuilds:
   cbor-extract: false
   esbuild: true
   sharp: true
+  workerd: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - '@supabase/auth-js@2.112.4'

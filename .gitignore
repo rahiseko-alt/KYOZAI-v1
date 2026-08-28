@@ -46,3 +46,4 @@ outputs/**
 !outputs/cache/
 !outputs/cache/.gitkeep
 .vercel
+apps/control-plane/.wrangler/
