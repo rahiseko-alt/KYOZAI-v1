@@ -74,6 +74,7 @@ describe("control plane boundary", () => {
   });
 
   it("limits stage leases to the declared recovery window", () => {
+    expect(parseStageCommand({ command: "ensure", stageRunId: "stage-1", jobId: "job-1", revisionId: "revision-1", stage: "analysis", slideNumber: 0, validator: "fixture", now: "2026-08-28T00:00:00.000Z" }).command).toBe("ensure");
     const claim = parseStageCommand({ command: "claim", stageRunId: "stage-1", leaseOwner: "workflow-1", leaseSeconds: 900, now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" });
     expect(claim.command).toBe("claim");
     if (claim.command === "claim") expect(claim.leaseSeconds).toBe(900);

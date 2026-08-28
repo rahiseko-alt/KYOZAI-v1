@@ -1,6 +1,7 @@
 type Row = Record<string, unknown>;
 
 export type StageCommand =
+  | { command: "ensure"; stageRunId: string; jobId: string; revisionId: string; stage: string; slideNumber: number; validator: string; model?: string; now: string }
   | { command: "claim"; stageRunId: string; leaseOwner: string; leaseSeconds: number; now: string; leaseExpiresAt: string }
   | { command: "pass"; stageRunId: string; leaseOwner: string; outputArtifactIds: string[]; validator: string; usageJson: string; now: string }
   | { command: "fail"; stageRunId: string; leaseOwner: string; errorCode: string; retry: boolean; retryStageRunId?: string; retryReason?: string; now: string };
@@ -12,6 +13,11 @@ const ids = (value: unknown) => { if (!Array.isArray(value) || value.length > 50
 export function parseStageCommand(value: unknown): StageCommand {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new StageCommandError("BAD_COMMAND");
   const x = value as Record<string, unknown>;
+  if (x.command === "ensure") {
+    if (typeof x.slideNumber !== "number" || !Number.isInteger(x.slideNumber) || x.slideNumber < 0) throw new StageCommandError("BAD_COMMAND");
+    const model = x.model === undefined ? undefined : text(x.model);
+    return { command: "ensure", stageRunId: text(x.stageRunId), jobId: text(x.jobId), revisionId: text(x.revisionId), stage: text(x.stage), slideNumber: x.slideNumber, validator: text(x.validator), model, now: text(x.now) };
+  }
   if (x.command === "claim") { if (typeof x.leaseSeconds !== "number" || !Number.isInteger(x.leaseSeconds) || x.leaseSeconds < 15 || x.leaseSeconds > 900) throw new StageCommandError("BAD_COMMAND"); return { command: "claim", stageRunId: text(x.stageRunId), leaseOwner: text(x.leaseOwner), leaseSeconds: x.leaseSeconds, now: text(x.now), leaseExpiresAt: text(x.leaseExpiresAt) }; }
   if (x.command === "pass") { const usageJson = text(x.usageJson); try { JSON.parse(usageJson); } catch { throw new StageCommandError("BAD_COMMAND"); } return { command: "pass", stageRunId: text(x.stageRunId), leaseOwner: text(x.leaseOwner), outputArtifactIds: ids(x.outputArtifactIds), validator: text(x.validator), usageJson, now: text(x.now) }; }
   if (x.command === "fail") { if (typeof x.retry !== "boolean") throw new StageCommandError("BAD_COMMAND"); const retryStageRunId = x.retryStageRunId === undefined ? undefined : text(x.retryStageRunId); if (x.retry && !retryStageRunId) throw new StageCommandError("BAD_COMMAND"); return { command: "fail", stageRunId: text(x.stageRunId), leaseOwner: text(x.leaseOwner), errorCode: text(x.errorCode), retry: x.retry, retryStageRunId, retryReason: x.retryReason === undefined ? undefined : text(x.retryReason), now: text(x.now) }; }
@@ -21,6 +27,16 @@ export function parseStageCommand(value: unknown): StageCommand {
 async function active(db: D1Database, id: string, owner: string, now: string) {
   const row = await db.prepare("SELECT s.id, s.job_id, s.revision_id, s.stage, s.slide_number, s.attempt, s.input_artifact_ids_json, s.validator, j.status AS job_status FROM stage_runs s JOIN jobs j ON j.id = s.job_id WHERE s.id = ? AND s.status = 'running' AND s.lease_owner = ? AND s.lease_expires_at > ?").bind(id, owner, now).first<Row>();
   if (!row) throw new StageCommandError("CONFLICT"); return row;
+}
+
+async function ensure(db: D1Database, x: Extract<StageCommand, { command: "ensure" }>) {
+  const existing = await db.prepare("SELECT id, attempt, status FROM stage_runs WHERE job_id = ? AND revision_id = ? AND stage = ? AND slide_number = ? ORDER BY attempt DESC LIMIT 1")
+    .bind(x.jobId, x.revisionId, x.stage, x.slideNumber).first<{ id: string; attempt: number; status: string }>();
+  if (existing) return { stage: existing, created: false };
+  const inserted = await db.prepare("INSERT INTO stage_runs (id, job_id, revision_id, stage, slide_number, status, validator, model, created_at) SELECT ?, ?, ?, ?, ?, 'pending', ?, ?, ? WHERE EXISTS (SELECT 1 FROM jobs WHERE id = ? AND status IN ('queued', 'running')) AND EXISTS (SELECT 1 FROM job_revisions WHERE id = ? AND job_id = ?)")
+    .bind(x.stageRunId, x.jobId, x.revisionId, x.stage, x.slideNumber, x.validator, x.model ?? null, x.now, x.jobId, x.revisionId, x.jobId).run();
+  if (inserted.meta.changes !== 1) throw new StageCommandError("CONFLICT");
+  return { stage: { id: x.stageRunId, attempt: 0, status: "pending" }, created: true };
 }
 
 async function claim(db: D1Database, x: Extract<StageCommand, { command: "claim" }>) {
@@ -44,4 +60,4 @@ async function fail(db: D1Database, x: Extract<StageCommand, { command: "fail" }
   if (result[0].meta.changes !== 1) throw new StageCommandError("CONFLICT"); return { retryStageRunId: retry ? x.retryStageRunId : undefined };
 }
 
-export async function executeStageCommand(db: D1Database, x: StageCommand) { if (x.command === "claim") return claim(db, x); if (x.command === "pass") return pass(db, x); return fail(db, x); }
+export async function executeStageCommand(db: D1Database, x: StageCommand) { if (x.command === "ensure") return ensure(db, x); if (x.command === "claim") return claim(db, x); if (x.command === "pass") return pass(db, x); return fail(db, x); }
