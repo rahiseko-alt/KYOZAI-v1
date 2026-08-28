@@ -69,8 +69,16 @@ describe("control plane boundary", () => {
   });
 
   it("limits stage leases to the declared recovery window", () => {
-    expect(parseStageCommand({ command: "claim", stageRunId: "stage-1", leaseOwner: "workflow-1", leaseSeconds: 900, now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" }).leaseSeconds).toBe(900);
+    const claim = parseStageCommand({ command: "claim", stageRunId: "stage-1", leaseOwner: "workflow-1", leaseSeconds: 900, now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" });
+    expect(claim.command).toBe("claim");
+    if (claim.command === "claim") expect(claim.leaseSeconds).toBe(900);
     expect(() => parseStageCommand({ command: "claim", stageRunId: "stage-1", leaseOwner: "workflow-1", leaseSeconds: 901, now: "now", leaseExpiresAt: "later" })).toThrow("BAD_COMMAND");
+  });
+
+  it("requires structured completion and retry inputs for stage commands", () => {
+    expect(parseStageCommand({ command: "pass", stageRunId: "stage-1", leaseOwner: "workflow-1", outputArtifactIds: [], validator: "fixture", usageJson: "{}", now: "2026-08-28T00:00:00.000Z" }).command).toBe("pass");
+    expect(() => parseStageCommand({ command: "pass", stageRunId: "stage-1", leaseOwner: "workflow-1", outputArtifactIds: [], validator: "fixture", usageJson: "not-json", now: "now" })).toThrow("BAD_COMMAND");
+    expect(() => parseStageCommand({ command: "fail", stageRunId: "stage-1", leaseOwner: "workflow-1", errorCode: "FAILED", retry: true, now: "now" })).toThrow("BAD_COMMAND");
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
