@@ -49,6 +49,16 @@ describe("control plane boundary", () => {
     expect(bind).toHaveBeenCalledWith("access-user@example.test");
   });
 
+  it("returns the original job for an identical idempotent create request", async () => {
+    const first = vi.fn(async () => ({ id: "job-original", input_kind: "text", request_json: "{\"request\":\"教材にする\"}", image_model: "gpt-image-1" }));
+    const bind = vi.fn(() => ({ first }));
+    const db = { prepare: vi.fn(() => ({ bind })) } as unknown as D1Database;
+    const result = await executeJobCommand(db, parseJobCommand({
+      command: "create", ownerId: "access-user@example.test", jobId: "job-new", revisionId: "revision-new", dispatchId: "dispatch-new", reservationId: "reservation-new", idempotencyKey: "request-1", inputKind: "text", requestJson: "{\"request\":\"教材にする\"}", imageModel: "gpt-image-1", workflowVersion: "kyozai-workflow@1", now: "2026-08-28T00:00:00.000Z", expiresAt: "2026-09-04T00:00:00.000Z", reservationExpiresAt: "2026-08-29T00:00:00.000Z", reservedImageCalls: 24, reservedCostUnits: 57,
+    }));
+    expect(result).toEqual({ jobId: "job-original", idempotent: true });
+  });
+
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
     expect(scheduledKind("*/5 * * * *")).toBe("dispatch");
     expect(scheduledKind("17 */6 * * *")).toBe("cleanup");

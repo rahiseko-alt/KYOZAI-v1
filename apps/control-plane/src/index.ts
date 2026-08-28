@@ -76,7 +76,7 @@ export async function handleControlPlaneRequest(request: Request, env: ControlPl
         const body = await request.json();
         return Response.json(await executeJobCommand(env.DB, parseJobCommand(body)), { headers: noStore });
       } catch (error) {
-        if (error instanceof JobCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : error.code === "NOT_FOUND" ? 404 : 400, headers: noStore });
+        if (error instanceof JobCommandError) return Response.json({ code: error.code }, { status: error.code === "SERVICE_UNAVAILABLE" ? 503 : error.code === "CONFLICT" ? 409 : error.code === "NOT_FOUND" ? 404 : 400, headers: noStore });
         return unavailable();
       }
     }
