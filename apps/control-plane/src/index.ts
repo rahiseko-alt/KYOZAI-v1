@@ -12,6 +12,7 @@ import { executeJobCommand, JobCommandError, parseJobCommand } from "./job-comma
 import { executeStageCommand, StageCommandError, parseStageCommand } from "./stage-commands";
 import { executeArtifactCommand, ArtifactCommandError, parseArtifactCommand } from "./artifact-commands";
 import { ArtifactObjectError, getArtifactBytes, putArtifactBytes } from "./artifact-objects";
+import { DispatchCommandError, executeDispatchCommand, parseDispatchCommand } from "./dispatch-commands";
 
 type Fetcher = typeof fetch;
 
@@ -96,6 +97,14 @@ export async function handleControlPlaneRequest(request: Request, env: ControlPl
         return Response.json(await executeArtifactCommand(env.DB, parseArtifactCommand(await request.json())), { headers: noStore });
       } catch (error) {
         if (error instanceof ArtifactCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : 400, headers: noStore });
+        return unavailable();
+      }
+    }
+    if (request.method === "POST" && pathname === "/internal/v1/dispatches/commands" && await bindingsReady(env)) {
+      try {
+        return Response.json(await executeDispatchCommand(env.DB, parseDispatchCommand(await request.json())), { headers: noStore });
+      } catch (error) {
+        if (error instanceof DispatchCommandError) return Response.json({ code: error.code }, { status: error.code === "CONFLICT" ? 409 : 400, headers: noStore });
         return unavailable();
       }
     }

@@ -5,6 +5,7 @@ import { executeJobCommand, parseJobCommand } from "../src/job-commands";
 import { parseStageCommand } from "../src/stage-commands";
 import { parseArtifactCommand } from "../src/artifact-commands";
 import { putArtifactBytes } from "../src/artifact-objects";
+import { parseDispatchCommand } from "../src/dispatch-commands";
 
 function environment(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return {
@@ -95,6 +96,11 @@ describe("control plane boundary", () => {
     const result = await putArtifactBytes(new Request("https://control.example/internal/v1/artifacts/artifact-1/bytes", { method: "PUT", body: "abc" }), db, { put, head } as unknown as R2Bucket, { put, head } as unknown as R2Bucket);
     expect(result).toEqual({ artifactId: "artifact-1", byteSize: 3 });
     expect(put).toHaveBeenCalledWith("fixture/path", expect.any(ReadableStream), expect.any(Object));
+  });
+
+  it("accepts only typed workflow dispatch lease commands", () => {
+    expect(parseDispatchCommand({ command: "claim", leaseOwner: "cron-1", now: "2026-08-28T00:00:00.000Z", leaseExpiresAt: "2026-08-28T00:15:00.000Z" }).command).toBe("claim");
+    expect(() => parseDispatchCommand({ command: "requeue", dispatchId: "d-1", leaseOwner: "cron-1", errorCode: "start_failed", now: "now" })).toThrow("BAD_COMMAND");
   });
 
   it("maps only the declared Cron schedules and sends the scheduler credential internally", async () => {
