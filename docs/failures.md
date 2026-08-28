@@ -1756,3 +1756,13 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
   provider、秘密値への影響はない。
 - **修正**：制約を「runningのstageにはstarted_atが必須」へ変更し、既存D1 tableを安全に再構築するmigrationを追加する。
 - **再発防止**：claim後のpass/fail fixtureでstarted_at、completed_at、terminal statusの組を検証する。
+
+## 2026-08-28 provider accounting追加後もWindowsのWrangler dry-runが異常終了した
+
+- **何が起きたか**：G1のprovider accounting migrationとcancellation settlement commandの追加後、
+  `pnpm -r build`を再実行した。Web buildとWorker bundle、D1/R2 binding解決、`--dry-run: exiting now.`の表示後に、
+  Windows/Node 24のWorker processだけがexit status `0xC0000409`で終了した。
+- **影響**：Cloudflareへの配備、remote D1/R2、Vercel設定、provider呼出し、秘密値の表示・共有は行われていない。
+  control-plane型検査・境界テスト、local D1 migration、local cancellation fixtureは別途合格している。
+- **修正状況**：このローカルdry-runを成功と扱わず、push後のLinux CI buildを合格証拠として確認する。
+- **再発防止**：Windowsで同じ終了コードが再発した場合も、bundle表示だけで合格にせず、実装検証とCI検証を分けて記録する。

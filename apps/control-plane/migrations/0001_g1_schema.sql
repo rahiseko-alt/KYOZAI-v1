@@ -116,8 +116,10 @@ CREATE TABLE IF NOT EXISTS quota_reservations (
   owner_id TEXT NOT NULL,
   reserved_image_calls INTEGER NOT NULL CHECK (reserved_image_calls BETWEEN 0 AND 24),
   confirmed_image_calls INTEGER NOT NULL DEFAULT 0 CHECK (confirmed_image_calls >= 0),
+  inflight_image_calls INTEGER NOT NULL DEFAULT 0 CHECK (inflight_image_calls >= 0),
   reserved_cost_units INTEGER NOT NULL CHECK (reserved_cost_units >= 0),
   confirmed_cost_units INTEGER NOT NULL DEFAULT 0 CHECK (confirmed_cost_units >= 0),
+  inflight_cost_units INTEGER NOT NULL DEFAULT 0 CHECK (inflight_cost_units >= 0),
   charge_state TEXT NOT NULL CHECK (charge_state IN ('reserved', 'confirmed', 'ambiguous', 'released')),
   expires_at TEXT NOT NULL,
   released_at TEXT,
@@ -130,6 +132,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
   job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   revision_id TEXT REFERENCES job_revisions(id) ON DELETE SET NULL,
   stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL,
+  operation TEXT NOT NULL DEFAULT 'image_generation' CHECK (operation IN ('text_generation', 'image_generation', 'image_qa')),
   provider TEXT NOT NULL,
   model TEXT,
   request_fingerprint TEXT NOT NULL,
@@ -143,7 +146,11 @@ CREATE TABLE IF NOT EXISTS usage_events (
   result_sha256 TEXT,
   result_byte_size INTEGER,
   created_at TEXT NOT NULL,
-  UNIQUE (job_id, request_fingerprint)
+  UNIQUE (job_id, request_fingerprint),
+  CHECK (
+    (result_storage_path IS NULL AND result_sha256 IS NULL AND result_byte_size IS NULL)
+    OR (result_storage_path IS NOT NULL AND length(result_sha256) = 64 AND result_byte_size > 0)
+  )
 );
 CREATE INDEX IF NOT EXISTS usage_events_job_idx ON usage_events (job_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS usage_events_recovery_idx ON usage_events (charge_state, result_storage_path);

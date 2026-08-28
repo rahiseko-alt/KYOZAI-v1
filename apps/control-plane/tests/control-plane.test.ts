@@ -49,6 +49,7 @@ describe("control plane boundary", () => {
     expect(parseJobCommand({ command: "list", ownerId: "access-user@example.test" })).toEqual({ command: "list", ownerId: "access-user@example.test" });
     expect(() => parseJobCommand({ command: "drop", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");
     expect(() => parseJobCommand({ command: "read", ownerId: "access-user@example.test" })).toThrow("BAD_COMMAND");
+    expect(parseJobCommand({ command: "settlePendingCancellations", now: "2026-08-28T00:00:00.000Z" })).toEqual({ command: "settlePendingCancellations", now: "2026-08-28T00:00:00.000Z", limit: 25 });
   });
 
   it("lists jobs through the gateway with an owner-scoped D1 query", async () => {

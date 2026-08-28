@@ -24,6 +24,11 @@ export class InternalDispatchError extends Error {
 }
 
 export async function settlePendingCancellations() {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneCommand<{ settled: number }>("jobs", { command: "settlePendingCancellations", now: new Date().toISOString(), limit: 25 });
+    if (!Number.isInteger(result.settled) || result.settled < 0) throw new InternalDispatchError("cancellation_settlement_failed");
+    return result.settled;
+  }
   const { data, error } = await createServerSupabaseClient().rpc("settle_pending_kyozai_cancellations");
   if (error || !Number.isInteger(data) || Number(data) < 0) throw new InternalDispatchError("cancellation_settlement_failed");
   return Number(data);

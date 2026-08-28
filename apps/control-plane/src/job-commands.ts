@@ -5,7 +5,8 @@ export type JobCommand =
   | { command: "list"; ownerId: string }
   | { command: "read"; ownerId: string; jobId: string }
   | { command: "cancel"; ownerId: string; jobId: string; now: string }
-  | { command: "delete"; ownerId: string; jobId: string; now: string };
+  | { command: "delete"; ownerId: string; jobId: string; now: string }
+  | { command: "settlePendingCancellations"; now: string; limit: number };
 
 export class JobCommandError extends Error {
   constructor(readonly code: "BAD_COMMAND" | "NOT_FOUND" | "CONFLICT" | "SERVICE_UNAVAILABLE") {
@@ -24,7 +25,7 @@ function requiredInteger(value: unknown, minimum: number, maximum: number) {
 }
 
 function commandName(value: unknown) {
-  if (value === "create" || value === "list" || value === "read" || value === "cancel" || value === "delete") return value;
+  if (value === "create" || value === "list" || value === "read" || value === "cancel" || value === "delete" || value === "settlePendingCancellations") return value;
   throw new JobCommandError("BAD_COMMAND");
 }
 
@@ -32,6 +33,9 @@ export function parseJobCommand(value: unknown): JobCommand {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new JobCommandError("BAD_COMMAND");
   const input = value as Record<string, unknown>;
   const command = commandName(input.command);
+  if (command === "settlePendingCancellations") {
+    return { command, now: requiredText(input.now, "now"), limit: input.limit === undefined ? 25 : requiredInteger(input.limit, 1, 50) };
+  }
   const ownerId = requiredText(input.ownerId, "ownerId");
   if (command === "create") {
     const inputKind = input.inputKind;
@@ -54,7 +58,29 @@ async function ownedJob(db: D1Database, ownerId: string, jobId: string) {
     .bind(jobId, ownerId).first<JobRow>();
 }
 
+async function settleCancellation(db: D1Database, jobId: string, now: string) {
+  const job = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind(jobId).first<{ status: string }>();
+  if (!job || (job.status !== "cancelling" && job.status !== "cancelled")) return false;
+
+  await db.prepare("UPDATE stage_runs SET status = 'skipped', started_at = COALESCE(started_at, ?), completed_at = ?, lease_owner = NULL, lease_expires_at = NULL, error_code = 'job_cancelled' WHERE job_id = ? AND (status = 'pending' OR (status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at <= ?)))")
+    .bind(now, now, jobId, now).run();
+  const result = await db.batch([
+    db.prepare("UPDATE usage_events SET charge_state = 'ambiguous', actual_cost_units = estimated_cost_units WHERE job_id = ? AND charge_state = 'reserved' AND NOT EXISTS (SELECT 1 FROM stage_runs WHERE job_id = ? AND status = 'running' AND lease_expires_at > ?)").bind(jobId, jobId, now),
+    db.prepare("UPDATE jobs SET status = 'cancelled', current_stage = NULL, updated_at = ? WHERE id = ? AND status IN ('cancelling', 'cancelled') AND NOT EXISTS (SELECT 1 FROM stage_runs WHERE job_id = ? AND status = 'running' AND lease_expires_at > ?)").bind(now, jobId, jobId, now),
+    db.prepare("UPDATE job_revisions SET status = 'cancelled', completed_at = ? WHERE job_id = ? AND status IN ('queued', 'running') AND NOT EXISTS (SELECT 1 FROM stage_runs WHERE job_id = ? AND status = 'running' AND lease_expires_at > ?)").bind(now, jobId, jobId, now),
+    db.prepare("UPDATE workflow_dispatches SET status = 'cancelled', completed_at = ?, lease_owner = NULL, lease_expires_at = NULL, last_error_code = 'job_cancelled', updated_at = ? WHERE job_id = ? AND status IN ('pending', 'dispatched') AND NOT EXISTS (SELECT 1 FROM stage_runs WHERE job_id = ? AND status = 'running' AND lease_expires_at > ?)").bind(now, now, jobId, jobId, now),
+    db.prepare("UPDATE quota_reservations SET confirmed_image_calls = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN image_count ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), confirmed_cost_units = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN actual_cost_units ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), reserved_image_calls = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN image_count ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), reserved_cost_units = COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN actual_cost_units ELSE 0 END) FROM usage_events WHERE job_id = ?), 0), inflight_image_calls = 0, inflight_cost_units = 0, charge_state = CASE WHEN EXISTS (SELECT 1 FROM usage_events WHERE job_id = ? AND charge_state = 'ambiguous') THEN 'ambiguous' WHEN COALESCE((SELECT SUM(CASE WHEN charge_state IN ('confirmed', 'ambiguous') THEN actual_cost_units ELSE 0 END) FROM usage_events WHERE job_id = ?), 0) = 0 THEN 'released' ELSE 'confirmed' END, released_at = ? WHERE job_id = ? AND NOT EXISTS (SELECT 1 FROM stage_runs WHERE job_id = ? AND status = 'running' AND lease_expires_at > ?)").bind(jobId, jobId, jobId, jobId, jobId, jobId, now, jobId, jobId, now),
+  ]);
+  return result[1].meta.changes === 1;
+}
+
 export async function executeJobCommand(db: D1Database, input: JobCommand) {
+  if (input.command === "settlePendingCancellations") {
+    const candidates = await db.prepare("SELECT j.id FROM jobs j JOIN quota_reservations q ON q.job_id = j.id WHERE j.status = 'cancelling' OR (j.status = 'cancelled' AND q.released_at IS NULL) ORDER BY j.updated_at LIMIT ?").bind(input.limit).all<{ id: string }>();
+    let settled = 0;
+    for (const candidate of candidates.results) if (await settleCancellation(db, candidate.id, input.now)) settled += 1;
+    return { settled };
+  }
   if (input.command === "create") {
     const existing = await db.prepare("SELECT id, input_kind, request_json, image_model FROM jobs WHERE owner_id = ? AND idempotency_key = ?")
       .bind(input.ownerId, input.idempotencyKey).first<JobRow>();
