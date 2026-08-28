@@ -2,7 +2,7 @@ export function stringArray(value: unknown): string[] {
   if (typeof value === "string") {
     try { return stringArray(JSON.parse(value)); } catch { return []; }
   }
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
 }
 
 export function parsedObject(value: unknown) {
