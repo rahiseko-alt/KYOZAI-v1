@@ -24,7 +24,7 @@
       "status": "in_progress",
       "goalContribution": "Complete one real direct-text job through the durable APP path.",
       "acceptanceEvidence": ["preview_real_provider_d1_run", "fault_recovery_matrix", "provider_usage_reconciliation"],
-      "gaps": ["missing_real_vertical_proof", "cloudflare_auth_ownership", "cloudflare_zero_cost_fail_closed", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount", "binary_storage_backend_not_selected"]
+      "gaps": ["missing_real_vertical_proof", "cloudflare_foundation", "cloudflare_auth_ownership", "cloudflare_zero_cost_fail_closed", "cancellation_stall", "provider_result_recovery", "provider_usage_undercount", "binary_storage_backend_not_selected"]
     },
     {
       "id": "G2",
