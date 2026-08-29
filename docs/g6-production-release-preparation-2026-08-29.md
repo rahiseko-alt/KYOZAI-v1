@@ -2,7 +2,7 @@
 
 制定: 2026-08-29  
 状態: **準備のみ。G1がactiveの間は実装・fixture実行・Gate状態の変更をしない。**  
-親Gate: G1（`shared/kyozai-parity-goal.json`）  
+親Gate: G6（現在のactive GateはG1。これはG6開始時の記録を先行して固定する準備文書であり、Gate状態を変更しない）
 ゴールへの寄与: G1--G5の実証が揃った後、5入力のSkill／APP同等性とProduction再開を、再検証可能な外部証拠で判定できるようにする。  
 G6合格証拠: `five_fixture_blind_evidence`、`production_pc_mobile_e2e`、`production_url_and_commit_sha`。
 
