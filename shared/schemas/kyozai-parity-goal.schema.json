@@ -9,6 +9,8 @@
     "version": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
     "canonicalPlan": { "const": "docs/skill-app-parity-execution-plan-2026-08-26.md" },
     "status": { "enum": ["in_progress", "completed"] },
+    "deliveryMode": { "enum": ["personal_pwa", "saas"] },
+    "saasFrozen": { "type": "boolean" },
     "activeGate": { "type": ["string", "null"], "pattern": "^G[0-6]$" },
     "productionGeneration": { "enum": ["locked_404", "authenticated_enabled"] },
     "fixtures": { "type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
