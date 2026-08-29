@@ -1880,3 +1880,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：isolated local fixtureがsnapshot検証前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
 - **修正**：fixture用rowの投入前にWorkerを停止し、D1書込み後に同じstateで再起動する。
 - **再発防止**：local D1 fixtureではWorkerを通す検証と直接D1投入を同時に行わず、state所有者を段階ごとに一つにする。
+
+## 2026-08-29 Windows Wrangler子processの終了待ちがfixtureを不安定化した
+
+- **何が起きたか**：WSLから起動したWindows版Wranglerが親shellの終了後もchild processを残し、次回fixtureのport確認とlocal D1再利用を不安定にした。
+- **影響**：isolated local fixtureの完走証拠は未取得。remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正状況**：fixtureにlistener停止と停止完了待ちを追加した。Windows固有のchild-tree終了はLinux CIでも検証してから合格証拠にする。
+- **再発防止**：OSをまたぐRunnerの終了コードだけでfixtureを合格扱いにせず、port解放とclean state作成を明示確認する。

@@ -43,6 +43,10 @@ cleanup() {
     if [ -n "${listener_pid}" ]; then
       taskkill.exe /PID "${listener_pid}" /T /F >/dev/null 2>&1 || true
     fi
+    for _ in $(seq 1 10); do
+      if ! netstat.exe -ano | awk -v port=":${PORT}" '$1 == "TCP" && $2 ~ port && $4 == "LISTENING" { found = 1 } END { exit found }'; then break; fi
+      sleep 1
+    done
     cmd.exe /C rmdir /S /Q "$(wslpath -w "${WORK}")" >/dev/null 2>&1 || true
   else
     rm -rf "${WORK}"
@@ -62,7 +66,6 @@ stop_worker() {
     PROCESS_PID=""
   fi
   if command -v wslpath >/dev/null 2>&1; then
-    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -like '*wrangler dev --local --port ${PORT}*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }" >/dev/null 2>&1 || true
     listener_pid="$(netstat.exe -ano | awk -v port=":${PORT}" '$1 == "TCP" && $2 ~ port && $4 == "LISTENING" { print $5; exit }')"
     if [ -n "${listener_pid}" ]; then
       taskkill.exe /PID "${listener_pid}" /T /F >/dev/null 2>&1 || true
@@ -128,7 +131,7 @@ status="$(post_job_command '{"command":"list","ownerId":"fixture-owner-b"}')"; e
 status="$(post_job_command '{"command":"read","ownerId":"fixture-owner-b","jobId":"fixture-job-a"}')"; expect_status "owner B read is non-existent" 404 "${status}"
 
 stop_worker
-bash "${PNPM_RUNNER}" --filter @kyozai/control-plane exec wrangler d1 execute kyozai-preview --local --persist-to "${WRANGLER_STATE_DIR}" --command "INSERT INTO stage_runs (id, job_id, revision_id, stage, slide_number, attempt, status, input_artifact_ids_json, output_artifact_ids_json, validator, usage_json, created_at, completed_at) VALUES ('fixture-stage-a', 'fixture-job-a', 'fixture-revision-a', 'analysis', 0, 0, 'passed', '[\"fixture-source-a\"]', '[\"fixture-artifact-a\"]', 'fixture', '{\"inputTokens\":12}', '2026-08-28T00:00:00.000Z', '2026-08-28T00:00:01.000Z'); INSERT INTO artifacts (id, job_id, revision_id, kind, lifecycle, storage_bucket, storage_path, sha256, media_type, byte_size, created_at, finalized_at) VALUES ('fixture-artifact-a', 'fixture-job-a', 'fixture-revision-a', 'analysis', 'final', 'kyozai-artifacts', 'fixture/job-a/analysis.json', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'application/json', 12, '2026-08-28T00:00:00.000Z', '2026-08-28T00:00:01.000Z');" >/dev/null
+bash "${PNPM_RUNNER}" --filter @kyozai/control-plane exec wrangler d1 execute kyozai-preview --local --persist-to "${WRANGLER_STATE_DIR}" --command "INSERT INTO stage_runs (id, job_id, revision_id, stage, slide_number, attempt, status, input_artifact_ids_json, output_artifact_ids_json, validator, usage_json, created_at, completed_at) VALUES ('fixture-stage-a', 'fixture-job-a', 'fixture-revision-a', 'analysis', 0, 0, 'passed', '[\"fixture-source-a\"]', '[\"fixture-artifact-a\"]', 'fixture', '{\"inputTokens\":12}', '2026-08-28T00:00:00.000Z', '2026-08-28T00:00:01.000Z'); INSERT INTO artifacts (id, job_id, revision_id, kind, lifecycle, storage_bucket, storage_path, sha256, media_type, byte_size, created_at, finalized_at) VALUES ('fixture-artifact-a', 'fixture-job-a', 'fixture-revision-a', 'analysis', 'final', 'kyozai-artifacts', 'fixture/job-a/analysis.json', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'application/json', 12, '2026-08-28T00:00:00.000Z', '2026-08-28T00:00:01.000Z');" || fail "fixture stage/artifact insertion failed"
 start_worker
 status="$(post_job_command '{"command":"read","ownerId":"fixture-owner-a","jobId":"fixture-job-a"}')"; expect_status "owner A snapshot read" 200 "${status}"; expect_json "D1 input artifact JSON is preserved" stages.0.input_artifact_ids_json '["fixture-source-a"]'; expect_json "D1 output artifact JSON is preserved" stages.0.output_artifact_ids_json '["fixture-artifact-a"]'; expect_json "D1 usage JSON is preserved" stages.0.usage_json '{"inputTokens":12}'
 
