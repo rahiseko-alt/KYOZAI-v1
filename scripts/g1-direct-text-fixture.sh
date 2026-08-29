@@ -17,36 +17,32 @@ BASE="http://127.0.0.1:${PORT}"
 WORK="$(mktemp -d "${REPO_ROOT}/outputs/tmp/g1-direct-text-fixture.XXXXXX")"
 STATE_DIR="${WORK}/wrangler-state"
 RESPONSE="${WORK}/response.json"
+WORKER_LOG="${WORK}/worker.log"
 TOKEN="g1-fixture-control-token"
 PNPM_RUNNER="${REPO_ROOT}/scripts/run-pnpm.sh"
 PROCESS_PID=""
 
 if command -v wslpath >/dev/null 2>&1; then
+  WINDOWS_REPO_ROOT="$(wslpath -w "${REPO_ROOT}")"
   WRANGLER_STATE_DIR="$(wslpath -w "${STATE_DIR}")"
   HTTP_RESPONSE="$(wslpath -w "${RESPONSE}")"
+  WORKER_LOG_PATH="$(wslpath -w "${WORKER_LOG}")"
   HTTP_CURL="curl.exe"
   HTTP_NULL="NUL"
   NODE_BIN="node.exe"
 else
+  WINDOWS_REPO_ROOT="${REPO_ROOT}"
   WRANGLER_STATE_DIR="${STATE_DIR}"
   HTTP_RESPONSE="${RESPONSE}"
+  WORKER_LOG_PATH="${WORKER_LOG}"
   HTTP_CURL="curl"
   HTTP_NULL="/dev/null"
   NODE_BIN="node"
 fi
 
 cleanup() {
-  stop_worker
+  stop_worker || true
   if command -v wslpath >/dev/null 2>&1; then
-    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*g1-direct-text-fixture*' } | ForEach-Object { cmd.exe /C taskkill /PID \$_.ProcessId /T /F | Out-Null }" >/dev/null 2>&1 || true
-    listener_pid="$(netstat.exe -ano | awk -v port=":${PORT}" '$1 == "TCP" && $2 ~ port && $4 == "LISTENING" { print $5; exit }')"
-    if [ -n "${listener_pid}" ]; then
-      taskkill.exe /PID "${listener_pid}" /T /F >/dev/null 2>&1 || true
-    fi
-    for _ in $(seq 1 10); do
-      if ! netstat.exe -ano | awk -v port=":${PORT}" '$1 == "TCP" && $2 ~ port && $4 == "LISTENING" { found = 1 } END { exit found }'; then break; fi
-      sleep 1
-    done
     cmd.exe /C rmdir /S /Q "$(wslpath -w "${WORK}")" >/dev/null 2>&1 || true
   else
     rm -rf "${WORK}"
@@ -59,28 +55,52 @@ fail() {
   exit 1
 }
 
-stop_worker() {
-  if [ -n "${PROCESS_PID}" ]; then
-    kill "${PROCESS_PID}" 2>/dev/null || true
-    wait "${PROCESS_PID}" 2>/dev/null || true
-    PROCESS_PID=""
-  fi
+port_is_listening() {
   if command -v wslpath >/dev/null 2>&1; then
-    listener_pid="$(netstat.exe -ano | awk -v port=":${PORT}" '$1 == "TCP" && $2 ~ port && $4 == "LISTENING" { print $5; exit }')"
-    if [ -n "${listener_pid}" ]; then
-      taskkill.exe /PID "${listener_pid}" /T /F >/dev/null 2>&1 || true
-    fi
+    netstat.exe -ano | awk -v port="${PORT}" '$1 == "TCP" && $4 == "LISTENING" { count = split($2, parts, ":"); if (parts[count] == port) found = 1 } END { exit !found }'
+    return
   fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1
+    return
+  fi
+  "${HTTP_CURL}" --silent --output "${HTTP_NULL}" --max-time 2 "${BASE}/health"
+}
+
+stop_worker() {
+  [ -n "${PROCESS_PID}" ] || return 0
+  if command -v wslpath >/dev/null 2>&1; then
+    taskkill.exe /PID "${PROCESS_PID}" /T /F >/dev/null 2>&1 || true
+    for _ in $(seq 1 10); do
+      if ! port_is_listening; then
+        PROCESS_PID=""
+        return 0
+      fi
+      sleep 1
+    done
+    echo "FAIL: Worker process ${PROCESS_PID} did not release port ${PORT}" >&2
+    return 1
+  fi
+  kill "${PROCESS_PID}" 2>/dev/null || true
+  wait "${PROCESS_PID}" 2>/dev/null || true
+  PROCESS_PID=""
 }
 
 start_worker() {
-  bash "${PNPM_RUNNER}" --filter @kyozai/control-plane exec wrangler dev --local --port "${PORT}" --persist-to "${WRANGLER_STATE_DIR}" --var "KYOZAI_CONTROL_PLANE_TOKEN:${TOKEN}" >"${WORK}/worker.log" 2>&1 &
-  PROCESS_PID="$!"
+  if command -v wslpath >/dev/null 2>&1; then
+    local command
+    command="call corepack.cmd pnpm@10.33.0 --filter @kyozai/control-plane exec wrangler dev --local --port ${PORT} --persist-to \"${WRANGLER_STATE_DIR}\" --var \"KYOZAI_CONTROL_PLANE_TOKEN:${TOKEN}\" > \"${WORKER_LOG_PATH}\" 2>&1"
+    PROCESS_PID="$(powershell.exe -NoProfile -NonInteractive -Command "\$process = Start-Process -FilePath 'cmd.exe' -WorkingDirectory '${WINDOWS_REPO_ROOT}' -ArgumentList @('/d', '/c', '${command}') -PassThru; [Console]::Out.Write(\$process.Id)" | tr -d '\r\n')"
+  else
+    bash "${PNPM_RUNNER}" --filter @kyozai/control-plane exec wrangler dev --local --port "${PORT}" --persist-to "${WRANGLER_STATE_DIR}" --var "KYOZAI_CONTROL_PLANE_TOKEN:${TOKEN}" >"${WORKER_LOG}" 2>&1 &
+    PROCESS_PID="$!"
+  fi
+  [ -n "${PROCESS_PID}" ] || fail "local Worker process did not start"
   for _ in $(seq 1 30); do
     if [ "$("${HTTP_CURL}" --silent --output "${HTTP_NULL}" --max-time 2 --write-out "%{http_code}" "${BASE}/health" || true)" = "200" ]; then return; fi
     sleep 1
   done
-  cat "${WORK}/worker.log" >&2
+  cat "${WORKER_LOG}" >&2
   fail "local Worker did not become ready"
 }
 
@@ -110,7 +130,7 @@ post_job_command() {
     --data "${payload}"
 }
 
-if "${HTTP_CURL}" --silent --output "${HTTP_NULL}" --max-time 2 "${BASE}/health"; then
+if port_is_listening; then
   fail "port ${PORT} is already in use; choose G1_FIXTURE_PORT"
 fi
 

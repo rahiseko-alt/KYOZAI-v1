@@ -1887,3 +1887,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：isolated local fixtureの完走証拠は未取得。remote D1/R2、provider、利用者データ、秘密値への影響はない。
 - **修正状況**：fixtureにlistener停止と停止完了待ちを追加した。Windows固有のchild-tree終了はLinux CIでも検証してから合格証拠にする。
 - **再発防止**：OSをまたぐRunnerの終了コードだけでfixtureを合格扱いにせず、port解放とclean state作成を明示確認する。
+
+## 2026-08-29 WSL fixture cleanupがWindows Workerの所有者を特定できなかった
+
+- **何が起きたか**：WSL shellでbackground起動したWindows版Wranglerは、POSIX側のbackground PIDとは別のWindows process treeとして残った。従来のcleanupはそのPIDを`kill`した後、command lineとport番号だけで残存processを探索していたため、fixture自身が開始していないlistenerまで停止対象になり得た。
+- **影響**：isolated local fixtureのport解放とstate削除が不安定だった。remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSLではPowerShell `Start-Process`でWindows側の親PIDを取得し、そのPIDだけを`taskkill /T`で終了する。終了後はport解放を待機し、未解放なら任意のlistenerをkillせずfixtureを失敗させる。
+- **再発防止**：cross-OS processを起動するfixtureは、開始時に所有者PIDを取得し、cleanupで名前・portだけの探索を使わない。
