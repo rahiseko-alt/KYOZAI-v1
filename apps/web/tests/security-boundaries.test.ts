@@ -14,6 +14,7 @@ describe("公開生成境界", () => {
 
   it("productionではpipeline flagが有効でも生成を公開しない", () => {
     expect(generationIsAvailable({ VERCEL_ENV: "production", PROCESS_PARITY_PIPELINE_ENABLED: "1" })).toBe(false);
+    expect(generationIsAvailable({ VERCEL_ENV: "production", KYOZAI_PERSONAL_PWA_ENABLED: "1", PROCESS_PARITY_PIPELINE_ENABLED: "1" })).toBe(true);
     expect(generationIsAvailable({ VERCEL_ENV: "preview", PROCESS_PARITY_PIPELINE_ENABLED: "1" })).toBe(true);
   });
 

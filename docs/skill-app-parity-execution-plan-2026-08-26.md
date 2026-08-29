@@ -11,7 +11,7 @@
 全5fixtureの実環境証拠が揃った後にだけ、認証済み利用者向けProduction生成を再開する。
 
 完了は実装量や単体テスト数ではなく、CI run URL、commit SHA、Production URL、
-blind evidence、provider usage突合、物理削除記録で判定する。G6合格までProduction生成は404を維持する。
+blind evidence、provider usage突合、物理削除記録で判定する。SaaS向けProduction生成は凍結し、個人PWAは専用guardと利用者自身のAPIキーが揃った場合だけ有効化する。
 
 ## 2026-08-29 SaaS化の凍結と個人PWAへの再定義
 
