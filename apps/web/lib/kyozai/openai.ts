@@ -229,6 +229,14 @@ export async function requestStructured(
         break;
       }
       if (error instanceof Error && error.message.startsWith("provider_result_unavailable:")) {
+        const resultState = error.message.slice("provider_result_unavailable:".length);
+        console.error(JSON.stringify({
+          event: "openai_provider_result_unavailable",
+          name,
+          attempt,
+          resultState: /^[a-z_]{1,64}$/.test(resultState) ? resultState : "unknown",
+          elapsedMs: Date.now() - startedAt,
+        }));
         throw new PublicHttpError(504, "TIMEOUT", "AIの結果を確認できませんでした。二重生成を避けるため自動再送はしていません。");
       }
       if (error instanceof Error && (error.message.startsWith("provider_checkpoint_") || error.message === "provider_attempt_settlement_failed")) throw error;
@@ -253,6 +261,9 @@ export async function requestStructured(
           ...(connection.code ? { connectionCode: connection.code } : {}),
           elapsedMs: Date.now() - startedAt,
         }));
+      } else {
+        const errorType = error instanceof Error && /^[A-Za-z0-9_]{1,64}$/.test(error.name) ? error.name : "unknown";
+        console.error(JSON.stringify({ event: "openai_request_failure", name, attempt, errorType, elapsedMs: Date.now() - startedAt }));
       }
       console.warn("OpenAI request could not complete", {
         name,
