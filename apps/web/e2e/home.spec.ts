@@ -8,6 +8,7 @@ test("個人PWAは教材作成画面を表示する", async ({ page }) => {
   await expect(page.getByRole("heading", { name: HOME_HEADING })).toBeVisible();
   await expect(page.getByText("公開体験版")).toBeVisible();
   await expect(page.getByRole("button", { name: "教材を作ってもらう" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /GPT Image 2 Medium/ })).toBeChecked();
   await expect(page.getByText("生成機能は現在、一般公開していません")).toHaveCount(0);
 });
 
