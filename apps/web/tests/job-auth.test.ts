@@ -21,7 +21,8 @@ beforeAll(async () => {
   publicJwk = { ...await exportJWK(keys.publicKey), kid: "test-access-key", alg: "RS256", use: "sig" };
   originalFetch = globalThis.fetch;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-    expect(String(input)).toBe(`${issuer}/cdn-cgi/access/certs`);
+    const url = input instanceof Request ? input.url : String(input);
+    expect(url).toBe(`${issuer}/cdn-cgi/access/certs`);
     return Response.json({ keys: [publicJwk] });
   }));
 });

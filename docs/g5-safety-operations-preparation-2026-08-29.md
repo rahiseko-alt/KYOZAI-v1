@@ -42,7 +42,7 @@
 
    - 変更: `apps/web/lib/kyozai/deletion-cleanup.ts`、`apps/web/app/api/internal/jobs/cleanup/route.ts`、`apps/web/lib/kyozai/control-plane-client.ts`。
    - `runOneDeletionCleanup`はCloudflare state flag時にclaim結果だけを使い、Vercelからgatewayの内部endpointでR2 delete/readbackを実行する。Supabase実装はG1〜G4同等証拠が残るまでfallbackとして保持する。
-   - Cron callerがPOSTであるため、cleanup routeはdispatch routeと同様に認証済み`POST`を受ける必要がある。現状は`invokeScheduler()`がPOSTを送る一方でcleanup routeが`GET`だけで、この不整合はG1のCloudflare Cron実証前に解消が必要である。
+   - Cron callerがPOSTであるため、cleanup routeはdispatch routeと同様に認証済み`POST`を受ける必要がある。この不整合は2026-08-29にGET/POST共通handlerへ修正済みであり、G1ではPreview Cron実証で確認する。
    - 6時間間隔はcleanupの遅延上限ではない。期限到来からclaim、削除完了までの時刻を計測し、SLO違反はjobを再公開せずoperation failureとして残す。
 
 4. artifact利用直前の再hashを単一helperへ集約する。

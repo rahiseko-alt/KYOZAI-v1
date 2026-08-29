@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+import { createLocalJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 import { isPublicProduction } from "./generation-access";
 import { routeUnavailable, unauthorized } from "./http-errors";
@@ -17,7 +17,8 @@ type CloudflareAccessConfig = {
   audience: string;
 };
 
-const accessJwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const accessJwksByIssuer = new Map<string, { expiresAt: number; keySet: ReturnType<typeof createLocalJWKSet> }>();
+const accessJwksCacheMilliseconds = 5 * 60_000;
 
 /** Access is opt-in until the Preview Access application has been configured. */
 export function cloudflareAccessEnabled(env: Env = process.env): boolean {
@@ -50,11 +51,15 @@ function readCloudflareAccessConfig(env: Env): CloudflareAccessConfig {
   return { issuer: url.origin, audience };
 }
 
-function accessJwks(config: CloudflareAccessConfig) {
+async function accessJwks(config: CloudflareAccessConfig) {
   const existing = accessJwksByIssuer.get(config.issuer);
-  if (existing) return existing;
-  const keySet = createRemoteJWKSet(new URL(`${config.issuer}/cdn-cgi/access/certs`));
-  accessJwksByIssuer.set(config.issuer, keySet);
+  if (existing && existing.expiresAt > Date.now()) return existing.keySet;
+  const response = await fetch(`${config.issuer}/cdn-cgi/access/certs`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!response.ok) throw new Error("access_jwks_unavailable");
+  const jwks: unknown = await response.json();
+  if (!jwks || typeof jwks !== "object" || !Array.isArray((jwks as { keys?: unknown }).keys)) throw new Error("access_jwks_invalid");
+  const keySet = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
+  accessJwksByIssuer.set(config.issuer, { expiresAt: Date.now() + accessJwksCacheMilliseconds, keySet });
   return keySet;
 }
 
@@ -77,7 +82,7 @@ async function requireCloudflareAccessUser(request: Request, env: Env): Promise<
   if (!token) unavailableAccess();
   const config = readCloudflareAccessConfig(env);
   try {
-    const { payload } = await jwtVerify(token, accessJwks(config), {
+    const { payload } = await jwtVerify(token, await accessJwks(config), {
       algorithms: ["RS256"],
       issuer: config.issuer,
       audience: config.audience,

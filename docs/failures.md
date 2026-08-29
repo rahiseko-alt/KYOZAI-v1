@@ -1838,3 +1838,45 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：Cloudflare Cronからcleanupを起動すると405となり得た。Preview/ProductionのCron、D1/R2、利用者データ、秘密値への実影響はない。
 - **修正**：cleanup処理を共通化し、Vercel Cron用GETとCloudflare scheduler用POSTの両方を同じ認証境界で受けるようにした。
 - **再発防止**：scheduler targetごとにmethodを契約テストで確認し、Cron呼出し側とroute側を同時に変更する。
+
+## 2026-08-29 WindowsのG1 direct-text fixtureがOS既定一時領域へ書き込めなかった
+
+- **何が起きたか**：`mktemp`がWindowsの`C:\\tmp`を選び、Wranglerのlocal D1 migrationがpermission errorで停止した。
+- **影響**：migration開始前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：fixtureの一時状態をリポジトリ配下の`outputs/tmp`に明示的に作成し、終了時に削除する。
+- **再発防止**：Windowsで実行するlocal Worker fixtureはOS既定の一時領域に依存せず、プロジェクト管理下の隔離ディレクトリを指定する。
+
+## 2026-08-29 WSLからWindows版WranglerへPOSIXのpersist pathを渡した
+
+- **何が起きたか**：前項の修正後も、WSL上の`/mnt/c/...`をWindows版Wranglerへそのまま渡したため、`C:\\mnt\\...`として解釈されpermission errorで停止した。
+- **影響**：local D1 migrationの開始前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSL環境では`wslpath -w`でpersist pathだけをWindows形式に変換してWranglerへ渡す。
+- **再発防止**：WSLからWindows実行ファイルを呼ぶfixtureでは、ファイル引数の形式を呼出し境界ごとに明示する。
+
+## 2026-08-29 fresh D1 migrationでprovider accounting columnが重複した
+
+- **何が起きたか**：`0001_g1_schema.sql`へ後続migration `0004_provider_accounting.sql`の追加columnを先取りして書いていたため、fresh databaseで`0004`がduplicate column errorとなった。
+- **影響**：isolated local fixtureのmigration中に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：先取りしたcolumnを`0001`から外し、既存環境とfresh環境の両方で`0004`が唯一のschema追加元となるようにした。
+- **再発防止**：適用済みmigrationのschemaを後続migrationと重ねて編集せず、fresh migration fixtureをschema変更ごとに実行する。
+
+## 2026-08-29 WSLのfixture health checkがWindows Workerへ到達しなかった
+
+- **何が起きたか**：Windows版Wranglerが起動した`127.0.0.1`へWSL版`curl`で接続したため、Workerはreadyでもhealth checkが失敗した。またcleanupもWindows子processを停止できなかった。
+- **影響**：isolated local fixtureが停止し、一時stateが残った。remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSL上ではWindows版`curl.exe`でHTTP確認を行い、port listenerをWindows側で停止してstateを削除する。
+- **再発防止**：local Workerの実行環境とHTTP clientのnetwork namespaceを一致させ、fixture cleanupはWorker processの所有OSで実行する。
+
+## 2026-08-29 WSLのfixture JSON assertionにLinux側Nodeを仮定した
+
+- **何が起きたか**：WorkerとHTTP clientをWindows側へ合わせた後も、fixtureのJSON assertionはWSLの`node`を呼んでおり、Node未導入のWSLでは初回command後に停止した。
+- **影響**：isolated local fixtureの途中で停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSLではWindows版`node.exe`を使い、HTTP responseのpathもWindows形式で渡す。
+- **再発防止**：cross-OS fixtureではWorker、HTTP client、assertion runtimeを同じOS側へ明示的に揃える。
+
+## 2026-08-29 local Worker起動中に同じD1 stateへfixture SQLを投入した
+
+- **何が起きたか**：Windows版Workerがlocal D1 stateを使用中に別のWrangler processからfixture用stage/artifact rowを書き込もうとして、SQLiteのlock待ちになった。
+- **影響**：isolated local fixtureがsnapshot検証前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：fixture用rowの投入前にWorkerを停止し、D1書込み後に同じstateで再起動する。
+- **再発防止**：local D1 fixtureではWorkerを通す検証と直接D1投入を同時に行わず、state所有者を段階ごとに一つにする。
