@@ -6,7 +6,7 @@
 
 - Vercel Productionの既存設定を再確認し、`PROCESS_PARITY_PIPELINE_ENABLED`、`OPENAI_API_KEY`、`OPENAI_MODEL`、`GEMINI_API_KEY`が登録済みであることを値非表示で確認した。過去に済んでいる設定を再要求した説明は誤りだった。
 - 個人PWA用の非秘密フラグ`KYOZAI_PERSONAL_PWA_ENABLED`をProductionへ登録した。個人PWA時のレート制限は追加料金のかかる共有Redisを使わず、プロセス内制限へ切り替えた。
-- `KYOZAI_RENDER_GRANT_SECRET`、`KYOZAI_RATE_LIMIT_ID_SECRET`、`UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN`はProductionの環境変数一覧に無かった。秘密値は受領・生成せず、署名設定が揃うまで画像生成経路はfail-closedとする。
+- `KYOZAI_RENDER_GRANT_SECRET`はProductionの環境変数一覧に無かった。個人PWAでは共有Redis設定を使わないため、PWAの同期生成に必要な残りの秘密設定はこの署名鍵だけである。秘密値は受領・生成せず、署名設定が揃うまで画像生成経路はfail-closedとする。
 - 個人PWAのProduction入口を`Workspace`へ分岐し、`manifest.webmanifest`、service worker、インストール用アイコンを追加した。PWA分岐テストを含むWebテスト178件、型検査、lint、Web buildは合格している。
 
 ## 現在のGate
