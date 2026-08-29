@@ -3,6 +3,8 @@
   "version": "2026-08-27",
   "canonicalPlan": "docs/skill-app-parity-execution-plan-2026-08-26.md",
   "status": "in_progress",
+  "deliveryMode": "personal_pwa",
+  "saasFrozen": true,
   "activeGate": "G1",
   "productionGeneration": "locked_404",
   "fixtures": ["direct_text", "long_pdf", "youtube_captioned", "reference_design", "natural_language_revision"],

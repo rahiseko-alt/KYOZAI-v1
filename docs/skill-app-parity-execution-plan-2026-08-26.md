@@ -13,6 +13,12 @@
 完了は実装量や単体テスト数ではなく、CI run URL、commit SHA、Production URL、
 blind evidence、provider usage突合、物理削除記録で判定する。G6合格までProduction生成は404を維持する。
 
+## 2026-08-29 SaaS化の凍結と個人PWAへの再定義
+
+利用者の明示指示により、不特定多数向けSaaS化、課金、テナント運用、常時稼働の共有基盤は凍結する。以後の完成対象は、利用者本人が自分の端末と自分のAPIキーで使う個人PWAとする。
+
+個人PWAでは、ブラウザーへ秘密値を渡さず、端末内または利用者が管理する単一環境で生成する。Cloudflare Accessによる多人数所有者分離、R2 subscription、共有quota、SaaS向けCron/SLOは完成条件から外し、SaaS再開時の再審議事項として記録する。Production 404ロックは解除し、個人PWAとして安全に利用できる単一利用者向け入口を整備する作業へ切り替える。ただし、APIキー未設定・上限不明・生成結果保存先なしの場合はfail-closedを維持する。
+
 ## AS-IS／TO-BE
 
 | AS-ISの不足 | TO-BE | Gate |
