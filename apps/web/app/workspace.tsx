@@ -16,13 +16,13 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { HOME_HEADING } from "@/lib/content";
-import { readPackageResponse, readRenderedSlideResponse } from "@/lib/kyozai/api-client";
-import type { ImageModelId } from "@/lib/kyozai/image-models";
-import type { RenderedSlideImage } from "@/lib/kyozai/image-types";
-import { createMontagePng } from "@/lib/kyozai/montage";
-import { createTeachingPackageZip } from "@/lib/kyozai/package-zip";
-import type { TeachingPackage } from "@/lib/kyozai/types";
+import { HOME_HEADING } from "../lib/content";
+import { readPackageResponse, readRenderedSlideResponse } from "../lib/kyozai/api-client";
+import type { ImageModelId } from "../lib/kyozai/image-models";
+import type { RenderedSlideImage } from "../lib/kyozai/image-types";
+import { createMontagePng } from "../lib/kyozai/montage";
+import { createTeachingPackageZip } from "../lib/kyozai/package-zip";
+import type { TeachingPackage } from "../lib/kyozai/types";
 import { AppHeader, DevBadge } from "./app-header";
 import { GeneratingView, type GenerationProgress } from "./generating-view";
 import { ImageModelPicker } from "./image-model-picker";
