@@ -18,7 +18,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 | AS-ISの不足 | TO-BE | Gate |
 |---|---|---|
 | 空manifest・空QA・工程逆順を検出しない | 実成果物、工程順、時刻、hash、QA内容を検証 | G0 |
-| 実DB・Storage・Workflow・providerの証拠がない | disposable Previewで実Provider縦断を残す | G1 |
+| 実DB・Storage・Workflow・providerの証拠がない | disposable Previewで実Provider縦断を残す（有料Storage契約は前提にしない） | G1 |
 | Vercel 5分Cronは0円運用制約と両立しない | 無料Supabase内schedulerから認証済みdispatcher／cleanupを起動し、Vercel設定にCronを置かない | G1 |
 | stage間cancelが残留 | 全境界でterminalへ確定 | G1 |
 | provider成功直後から回収不能 | 二重課金せず結果を回収・再開 | G1 |
@@ -39,7 +39,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。G6�
 | Gate | 目的 | 必須の合格証拠 |
 |---|---|---|
 | G0 | 正しい測定器 | negative package全件不合格、正本Skill実package合格 |
-| G1 | 直接入力の実縦断 | Preview実Provider完走、停止回復、二重課金0 |
+| G1 | 直接入力の実縦断 | Preview実Provider完走、停止回復、二重課金0、D1状態・usage突合（バイナリStorageは別Gate） |
 | G2 | 文書入力と納品完全性 | 長文PDF／Markdown完走、原典追跡、ZIP／manifest一致 |
 | G3 | YouTubeと参考デザイン | 実字幕と参考画像fixture完走 |
 | G4 | 自然文修正と不変版 | 3修正fixture、対象外差分0、旧版維持／復元 |
@@ -93,6 +93,14 @@ ZIP作成をWorkersへ移せないことを確認した。CloudflareはD1/R2/sta
 Workflowは重い生成工程を継続する。G1 Previewの認証はCloudflare Access One-time PINとし、
 Vercel APIはAccess JWTを検証して所有者を確定する。詳細、対応表、実装順序、外部設定は
 `docs/g1-cloudflare-foundation-plan-2026-08-28.md` を参照する。
+
+## 2026-08-29 追加課金なしへの計画変更
+
+利用者がR2 subscriptionの追加料金を支払わないと決定した。R2の初回有効化には登録済み支払方法を使う契約確認が必要であり、無料枠内であっても超過時の自動請求を伴うため、エージェントは契約を実行しない。
+
+この決定により、G1の必須証拠をD1のjob/revision/stage/usage状態、Cloudflare Access所有者分離、実Providerの予約・確定・曖昧状態、故障後の結果回収へ限定する。R2のPNG/ZIP実byte保存・readback hashはG1の合格条件から外し、無料で利用できるバイナリStorage方式が別途選定されるまで未解決のG5/G6前提として保持する。R2未有効化またはStorage上限不明時は新規生成をfail-closedにする。
+
+Production生成404、全5fixtureの実証、G6の外部attestation判定は変更しない。無料Storage方式が確定した場合は、この節を根拠にG1以降のartifact証拠を再審議し、計画とGoal JSONを同時に更新する。
 
 ## 計画外問題
 
