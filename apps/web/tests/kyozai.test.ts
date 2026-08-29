@@ -291,7 +291,14 @@ describe("AI構造化応答", () => {
       headers: { "Content-Type": "text/event-stream" },
     });
 
-    await expect(streamingOutput(response, 10)).rejects.toThrow("OpenAI stream timed out");
+    await expect(streamingOutput(response, 10)).rejects.toMatchObject({ kind: "timeout" });
+  });
+
+  it("OpenAIのstream errorイベントを本文なしの失敗として分類する", async () => {
+    const body = new TextEncoder().encode(`data: ${JSON.stringify({ type: "error", error: { message: "ignored" } })}\n\n`);
+    const response = new Response(body, { headers: { "Content-Type": "text/event-stream" } });
+
+    await expect(streamingOutput(response, 100)).rejects.toMatchObject({ kind: "event_error" });
   });
 
   it("routeの残り時間が足りない場合は新しいAI試行を開始しない", async () => {
