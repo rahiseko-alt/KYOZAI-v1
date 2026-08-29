@@ -17,6 +17,7 @@
 - CIはtypecheck/lint/test/build、smoke、E2E、CodeQL、ci-greenが成功。local direct-text fixtureは作成、冪等性、所有者分離、D1 readback、cancel/deleteまで通過した。
 - Windows版Wranglerの子processが終了後にportを解放しない問題は、G1のPreview受入を直接変えないためG6後へ再審議する。Production生成404ロックは維持する。
 - G1未完了は外部Preview設定と実Provider証拠のみ。利用者がCloudflare/Vercelへ秘密値を直接登録した後、`docs/g1-preview-evidence-capture-2026-08-29.md`のE1〜E5を実行する。
+- R2は利用者の「追加料金を払わない」決定により未契約。R2が有効化されるまでprivate artifactのPreview実Provider証拠は取得せず、生成受付はfail-closedのままにする。
 
 ## 復帰先
 

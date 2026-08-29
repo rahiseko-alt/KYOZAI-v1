@@ -137,3 +137,11 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 判断: G1のPreview実Provider、Access所有者分離、usage突合の外部証拠を阻害しない小問題として、G6完了後に再審議する。
 - 実施済み: 起動時に所有PIDを記録し、そのprocess treeだけを停止するcleanup、port解放確認、失敗履歴を追加した。
 - 状態: deferred_after_g6
+
+## 2026-08-29 R2契約の課金回避決定
+
+- 発見Gate: G1
+- 利用者決定: 既存カードを使うR2 subscriptionは契約せず、追加料金を発生させない。
+- 影響: R2 private artifactを使うPreview実Provider縦断は、R2が有効化されるまで実施不可。Production生成404ロックと新規jobのfail-closedは維持する。
+- 次の判断: 無料枠内で課金上限を機械的に監視できるCloudflare構成が確認できた場合のみ再審議する。秘密値や支払情報は記録しない。
+- 状態: blocked_by_billing_decision
