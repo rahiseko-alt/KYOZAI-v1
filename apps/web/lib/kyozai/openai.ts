@@ -1,7 +1,7 @@
 import { isTeachingPackage, teachingPackageSchema } from "./schema";
 import { designInstructions } from "./design";
 import { PublicHttpError } from "./http-errors";
-import { streamingOutput, type OpenAiResponsePayload } from "./openai-stream";
+import { OpenAiStreamError, streamingOutput, type OpenAiResponsePayload } from "./openai-stream";
 import { injectG1Fault } from "./g1-fault-injection";
 import {
   beginProviderAttempt,
@@ -169,9 +169,17 @@ export async function requestStructured(
             payload = (await response.json()) as ApiResponse;
             raw = outputText(payload);
           }
-        } catch {
+        } catch (error) {
+          const streamFailure = error instanceof OpenAiStreamError ? error.kind : "unknown";
+          console.error(JSON.stringify({
+            event: "openai_stream_failure",
+            name,
+            attempt,
+            streamFailure,
+            elapsedMs: Date.now() - startedAt,
+          }));
           await markProviderAttemptAmbiguous(providerAttempt);
-          throw new Error("provider_result_unavailable:ambiguous");
+          throw new Error(`provider_result_unavailable:stream_${streamFailure}`);
         }
 
         injectG1Fault("provider_response_received");

@@ -6,6 +6,15 @@ export type OpenAiResponsePayload = {
   error?: { message?: string };
 };
 
+export type OpenAiStreamFailureKind = "missing_body" | "timeout" | "invalid_event" | "event_error" | "read_failure";
+
+export class OpenAiStreamError extends Error {
+  constructor(readonly kind: OpenAiStreamFailureKind) {
+    super(`OpenAI stream ${kind}`);
+    this.name = "OpenAiStreamError";
+  }
+}
+
 type StreamEvent = {
   type?: string;
   delta?: string;
@@ -15,7 +24,7 @@ type StreamEvent = {
 };
 
 export async function streamingOutput(response: Response, timeoutMs: number): Promise<{ payload: OpenAiResponsePayload; raw: string }> {
-  if (!response.body) throw new Error("OpenAI stream did not include a body");
+  if (!response.body) throw new OpenAiStreamError("missing_body");
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -25,7 +34,7 @@ export async function streamingOutput(response: Response, timeoutMs: number): Pr
   let payload: OpenAiResponsePayload = { status: "in_progress" };
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutResult = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => reject(new Error("OpenAI stream timed out")), timeoutMs);
+    timeout = setTimeout(() => reject(new OpenAiStreamError("timeout")), timeoutMs);
   });
 
   const consumeEvent = (block: string) => {
@@ -36,18 +45,30 @@ export async function streamingOutput(response: Response, timeoutMs: number): Pr
       .join("\n");
     if (!data || data === "[DONE]") return;
 
-    const event = JSON.parse(data) as StreamEvent;
+    let event: StreamEvent;
+    try {
+      event = JSON.parse(data) as StreamEvent;
+    } catch {
+      throw new OpenAiStreamError("invalid_event");
+    }
     if (event.type === "response.output_text.delta") raw += event.delta ?? "";
     if (event.type === "response.output_text.done") finalText = event.text ?? raw;
     if (event.type === "response.completed" || event.type === "response.incomplete" || event.type === "response.failed") {
       payload = event.response ?? payload;
     }
-    if (event.type === "error") throw new Error("OpenAI streaming error");
+    if (event.type === "error") throw new OpenAiStreamError("event_error");
   };
 
   try {
     while (true) {
-      const { done, value } = await Promise.race([reader.read(), timeoutResult]);
+      let read: ReadableStreamReadResult<Uint8Array>;
+      try {
+        read = await Promise.race([reader.read(), timeoutResult]);
+      } catch (error) {
+        if (error instanceof OpenAiStreamError) throw error;
+        throw new OpenAiStreamError("read_failure");
+      }
+      const { done, value } = read;
       buffer += decoder.decode(value, { stream: !done });
       buffer = buffer.replaceAll("\r\n", "\n");
       let boundary = buffer.indexOf("\n\n");
