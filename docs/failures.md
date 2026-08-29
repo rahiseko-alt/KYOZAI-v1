@@ -1929,3 +1929,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：Webの画像処理buildは単独で完走しており、今回のWebコード、Provider、秘密値には影響しない。
 - **対応**：Web build、smoke、E2Eを対象範囲の証拠として個別に完走した。control-planeの合格証拠は既存方針どおりLinux CIまたはCloudflare実行環境を使う。
 - **再発防止**：PWAのみの変更でWindows control-plane終了コードを画像機能の不合格へ混同しない。一方でCIではcontrol-plane jobを省略しない。
+
+## 2026-08-29 個人PWA画像canaryでGemini Provider 429と教材生成の一時502を観測
+
+- **何が起きたか**：画像修正後のProduction canaryで、Gemini画像ProviderはGoogle側429を返した。アプリは`SERVICE_UNAVAILABLE`と`image_provider_response`で安全に返却した。また、最小教材生成を複数回行った後の1回が一般的な上流502となった。
+- **影響**：Gemini選択時はProviderが利用可能になるまで画像生成できない。OpenAI `gpt-image-2-medium`は同じProductionで実画像生成・画像QA・PNG hash検証まで成功した。教材生成の一時502は今回の画像render adapterの障害と断定しない。
+- **対応**：GeminiのBeta wire契約を公式Models API SDKへ置換済みで、Provider／decode／normalize／QAの失敗段階とrequest IDを表示・ログ相関可能にした。成功済み画像は端末内checkpointから失敗ページだけ再開する。
+- **再発防止**：通常CIはrecorded fixtureでProvider契約を検査し、実Providerは低コスト1枚canaryに分離する。Provider 429をモデル契約エラーやSharp障害として混同しない。
