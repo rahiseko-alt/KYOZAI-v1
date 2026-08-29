@@ -5,6 +5,7 @@ import { mockPackage } from "../lib/kyozai/mock";
 import { DESIGN_PROFILE } from "../lib/kyozai/design";
 import { generatePackage } from "../lib/kyozai/content-generation";
 import { API_ROUTE_BUDGET_MS } from "../lib/kyozai/openai";
+import { streamingOutput } from "../lib/kyozai/openai-stream";
 import { packageHtml } from "../lib/kyozai/package-html";
 import { readPackageResponse } from "../lib/kyozai/api-client";
 import { rateLimit } from "../lib/kyozai/rate-limit";
@@ -270,6 +271,14 @@ describe("AI構造化応答", () => {
     await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る", Date.now() + 120_000))
       .rejects.toThrow("自動再送はしていません");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("停止したOpenAIストリームを設定時間で中断する", async () => {
+    const response = new Response(new ReadableStream<Uint8Array>({ start() {} }), {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+
+    await expect(streamingOutput(response, 10)).rejects.toThrow("OpenAI stream timed out");
   });
 
   it("routeの残り時間が足りない場合は新しいAI試行を開始しない", async () => {
