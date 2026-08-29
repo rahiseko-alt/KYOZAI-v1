@@ -21,8 +21,8 @@
 
 - G1実装範囲（D1/R2/Workers gateway、dispatch、provider accounting、Access JWT所有者分離、direct-text経路）は実装済み。
 - CIはtypecheck/lint/test/build、smoke、E2E、CodeQL、ci-greenが成功。local direct-text fixtureは作成、冪等性、所有者分離、D1 readback、cancel/deleteまで通過した。
-- Windows版Wranglerの子processが終了後にportを解放しない問題は、G1のPreview受入を直接変えないためG6後へ再審議する。Production生成404ロックは維持する。
-- G1未完了は外部Preview設定と実Provider証拠のみ。利用者がCloudflare/Vercelへ秘密値を直接登録した後、`docs/g1-preview-evidence-capture-2026-08-29.md`のE1〜E5を実行する。
+- Windows版Wranglerの子processが終了後にportを解放しない問題は、G1のPreview受入を直接変えないためG6後へ再審議する。Productionは個人PWAフラグでのみ同期生成を許可する。
+- G1未完了はR2契約なしによるバイナリ保存、実Provider証拠、署名鍵などのProduction秘密設定である。秘密値は利用者が直接登録するまでfail-closedとする。
 - R2は利用者の「追加料金を払わない」決定により未契約。R2が有効化されるまでprivate artifactのPreview実Provider証拠は取得せず、生成受付はfail-closedのままにする。
 
 ## 復帰先
@@ -50,12 +50,11 @@
 
 ## 外部ブロッカー
 
-- Cloudflare account、D1 database、R2 private bucket、Workersの実行設定は未作成。
+- Cloudflare accountとD1 database（`kyozai-preview`）は作成済み。R2 private bucketは追加料金を発生させない方針により未契約で、Workersの実行設定はdry-run後に再検証する。
 - Cloudflare Access One-time PINを採用済みだが、Zero Trust organization、許可リスト、Access application、
   Vercel Previewを通す正規hostnameは未設定である。
-- Vercel PreviewはReadyだが、Cloudflare基盤の実証に必要な環境変数は未登録。
-- Windows/Node 24では`wrangler deploy --dry-run`がbundleとbinding解決後に`0xC0000409`で異常終了する。
-  local D1 migrationとlocal Worker起動は合格しているが、Cloudflare実行環境またはCIでdry-runを再検証する。
+- Vercel Productionには既存のprovider設定とpipeline flag、および個人PWA非秘密フラグを登録済み。署名鍵・共有Redis設定は未登録である。
+- Windows/Node 24では`wrangler deploy --dry-run`がbundleとbinding解決後に`0xC0000409`（終了コード`3221226505`）で異常終了する。local D1 migrationとlocal Worker起動は合格しているが、Cloudflare実行環境またはCIでdry-runを再検証する。
 
 ## 最新の実装状態
 
