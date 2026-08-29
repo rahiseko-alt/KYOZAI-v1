@@ -21,6 +21,7 @@ WORKER_LOG="${WORK}/worker.log"
 TOKEN="g1-fixture-control-token"
 PNPM_RUNNER="${REPO_ROOT}/scripts/run-pnpm.sh"
 PROCESS_PID=""
+WORKER_PORT_PID=""
 
 if command -v wslpath >/dev/null 2>&1; then
   WINDOWS_REPO_ROOT="$(wslpath -w "${REPO_ROOT}")"
@@ -41,14 +42,16 @@ else
 fi
 
 cleanup() {
-  stop_worker || true
+  local status="$1"
+  stop_worker || status=1
   if command -v wslpath >/dev/null 2>&1; then
     cmd.exe /C rmdir /S /Q "$(wslpath -w "${WORK}")" >/dev/null 2>&1 || true
   else
     rm -rf "${WORK}"
   fi
+  exit "${status}"
 }
-trap cleanup EXIT
+trap 'cleanup $?' EXIT
 
 fail() {
   echo "FAIL: $*" >&2
@@ -67,13 +70,21 @@ port_is_listening() {
   "${HTTP_CURL}" --silent --output "${HTTP_NULL}" --max-time 2 "${BASE}/health"
 }
 
+port_owner_pid() {
+  netstat.exe -ano | awk -v port="${PORT}" '$1 == "TCP" && $4 == "LISTENING" { count = split($2, parts, ":"); if (parts[count] == port) { print $5; exit } }'
+}
+
 stop_worker() {
   [ -n "${PROCESS_PID}" ] || return 0
   if command -v wslpath >/dev/null 2>&1; then
     taskkill.exe /PID "${PROCESS_PID}" /T /F >/dev/null 2>&1 || true
-    for _ in $(seq 1 10); do
+    if [ -n "${WORKER_PORT_PID}" ]; then
+      taskkill.exe /PID "${WORKER_PORT_PID}" /T /F >/dev/null 2>&1 || true
+    fi
+    for _ in $(seq 1 30); do
       if ! port_is_listening; then
         PROCESS_PID=""
+        WORKER_PORT_PID=""
         return 0
       fi
       sleep 1
@@ -97,7 +108,10 @@ start_worker() {
   fi
   [ -n "${PROCESS_PID}" ] || fail "local Worker process did not start"
   for _ in $(seq 1 30); do
-    if [ "$("${HTTP_CURL}" --silent --output "${HTTP_NULL}" --max-time 2 --write-out "%{http_code}" "${BASE}/health" || true)" = "200" ]; then return; fi
+    if [ "$("${HTTP_CURL}" --silent --output "${HTTP_NULL}" --max-time 2 --write-out "%{http_code}" "${BASE}/health" || true)" = "200" ]; then
+      if command -v wslpath >/dev/null 2>&1; then WORKER_PORT_PID="$(port_owner_pid)"; fi
+      return
+    fi
     sleep 1
   done
   cat "${WORKER_LOG}" >&2
