@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST } from "../app/api/render-slide/route";
-import { publicErrorResponse } from "../lib/kyozai/http-errors";
+import { PublicHttpError, publicErrorResponse } from "../lib/kyozai/http-errors";
 import { imagePipelineError } from "../lib/kyozai/image-pipeline-error";
 import { DEFAULT_PERSONAL_PWA_IMAGE_MODEL, isImageModelId } from "../lib/kyozai/image-models";
 import { buildSlideImagePrompt } from "../lib/kyozai/image-prompt";
@@ -141,6 +141,21 @@ describe("画像生成工程", () => {
     expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('"stage":"image_qa_response"'));
     expect(JSON.stringify(errorLog.mock.calls)).not.toContain("sensitive-source-value");
     errorLog.mockRestore();
+  });
+
+  it("本文生成のtimeoutは現在工程と安全な相関IDだけを返す", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = publicErrorResponse(
+      new PublicHttpError(504, "TIMEOUT", "AIの結果を確認できませんでした。"),
+      "fallback",
+      { requestId: "00000000-0000-4000-8000-000000000001", stage: "script_timing", elapsedMs: 12345 },
+    );
+    const payload = await response.json() as { stage?: string; requestId?: string; elapsedMs?: number };
+
+    expect(response.status).toBe(504);
+    expect(payload).toMatchObject({ stage: "script_timing", requestId: "00000000-0000-4000-8000-000000000001" });
+    expect(JSON.stringify(payload)).not.toContain("12345");
+    expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('"elapsedMs":12345'));
   });
 
   it("Gemini公式SDK形のinlineData応答と16:9の1K寸法を受け入れる", async () => {

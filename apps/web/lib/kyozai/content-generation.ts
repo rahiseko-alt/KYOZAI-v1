@@ -27,6 +27,7 @@ export type ContentFreezeGate = {
 };
 export type ContentGenerationStage = "analysis" | "slide_map" | "script_timing" | "content_freeze" | "design";
 export type ContentGenerationObserver = (stage: ContentGenerationStage, output: unknown) => Promise<void>;
+export type ContentGenerationStartObserver = (stage: ContentGenerationStage) => Promise<void>;
 
 const groundingRules = [
   "入力資料だけを根拠に日本語で処理してください。根拠のない数値・制度・事例を補わないでください。",
@@ -186,13 +187,17 @@ export function buildDesignedPackage(sources: SourceInput[], analysis: TeachingA
   return buildTeachingPackage(sources, analysis, map, scripts, freeze, process.env.OPENAI_MODEL || "gpt-5.5");
 }
 
-export async function generatePackage(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY, observe?: ContentGenerationObserver) {
+export async function generatePackage(sources: SourceInput[], request: string, deadlineMs = Number.POSITIVE_INFINITY, observe?: ContentGenerationObserver, observeStart?: ContentGenerationStartObserver) {
+  await observeStart?.("analysis");
   const analysis = await generateTeachingAnalysis(sources, request, deadlineMs);
   await observe?.("analysis", analysis);
+  await observeStart?.("slide_map");
   let map = await generateSlideMap(sources, request, analysis, deadlineMs);
   await observe?.("slide_map", map);
+  await observeStart?.("script_timing");
   let scripts = await generateScriptTiming(sources, request, analysis, map, deadlineMs);
   await observe?.("script_timing", scripts);
+  await observeStart?.("content_freeze");
   const gate = await runContentFreezeGate(sources, request, analysis, map, scripts, deadlineMs);
   map = gate.map;
   scripts = gate.scripts;
@@ -200,6 +205,7 @@ export async function generatePackage(sources: SourceInput[], request: string, d
   if (!gate.review.passed || gate.review.issues.length > 0) {
     throw new Error("内容凍結QAに合格しなかったため、画像生成を開始しません。");
   }
+  await observeStart?.("design");
   const teachingPackage = buildDesignedPackage(sources, analysis, map, scripts, gate.review);
   await observe?.("design", { designProfile: teachingPackage.designProfile, slides: teachingPackage.slides.map(({ number, layoutFamily, labels, composition }) => ({ number, layoutFamily, labels, composition })) });
   return teachingPackage;

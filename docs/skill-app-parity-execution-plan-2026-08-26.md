@@ -38,6 +38,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。SaaS
 - テスト方法: SDK形Gemini／OpenAI／QAのrecorded fixture unit、段階別の故障注入unit、route error mapping、IndexedDB resumeのcomponent/E2E、typecheck、lint、全test、build、smoke、E2Eを実行する。通常CIは実APIを呼ばず、Production canaryは明示操作で1枚ずつ実行してHTTP応答・画像hash・Vercel request IDを証拠にする。現在の旧404 smoke失敗（[run 33235270171](https://github.com/rahiseko-alt/KYOZAI-v1/actions/runs/33235270171)）はこの変更で置換する。
 - 実証結果: commit `76a24ef6ed3b980fa1bfacdd6673ae89678b7a89`をProductionへ配備後、OpenAI `gpt-image-2-medium`の最小fixtureを実Provider・画像QA経由で1枚生成し、HTTP 200、PNG magic、1672×941、SHA-256一致、QA passed、attempt 1を確認した。Gemini canaryはGoogle側429を`SERVICE_UNAVAILABLE`／`image_provider_response`として安全に返した。これは契約不整合ではなくProvider利用可能性の証拠として保持する。
 - 個人PWAの初期選択: 上記実証済みの`gpt-image-2-medium`を初期選択にする。Geminiは明示選択の比較候補として維持し、Provider 429をOpenAIへの無断切替で隠さない。
+- 本文生成504の観測と最小対応（G1-PWA-CONTENT-OBS-001）: 親GateはG1の個人PWA公開例外。Productionの`POST /api/generate`が504となり、画像生成前の本文生成が未完了であることを確認した。根本のProvider停止工程は未特定のため、挙動・品質工程・timeout値を変えず、本文生成の開始工程（analysis／slide_map／script_timing／content_freeze／design）、経過時間、相関request IDだけを安全に記録・返却する。受入条件は、timeout時に本文・プロンプト・APIキー・上流本文を含まず工程・相関IDを返し、各Provider境界の開始工程をunitで検証すること。
 
 ## AS-IS／TO-BE
 
