@@ -1908,3 +1908,24 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：アプリの型検査・テスト・E2Eには影響せず、CIの契約検証ジョブと`ci-green`だけが失敗した。
 - **修正**：Goal Schemaへ両プロパティの型と許容値を追加し、`pnpm validate:goal`、skill検証、Webテスト178件、型検査、lintを再実行して合格させた。
 - **再発防止**：Goal JSONの方針フィールドを変更する際は、JSON本体と厳格Schemaを同一コミットで更新し、CI契約検証を先に実行する。
+
+## 2026-08-29 Google SDK追加時のpnpm build-script policy未登録
+
+- **何が起きたか**：Geminiの公式SDKを追加した直後、`pnpm`の依存同期がSDKとその依存`protobufjs`のbuild scriptを未登録として停止した。続いてpnpmが案内用の重複YAML行を追記し、YAML解析も停止した。
+- **影響**：ローカル型検査が一時停止しただけで、Production、秘密値、Provider呼出しには影響しなかった。
+- **修正**：`pnpm-workspace.yaml`の`allowBuilds`へ両依存を明示的に`false`で登録し、案内用の重複行を削除した。SDKはbuild scriptを実行せずに同期・型検査できることを確認する。
+- **再発防止**：新しい依存を追加する際は、先にbuild-script policyを確認し、実行不要なscriptを暗黙に許可しない。
+
+## 2026-08-29 Workspaceの画像再開実装が行数lintを超過
+
+- **何が起きたか**：画像checkpointと再開UIを既存`workspace.tsx`へ加えた結果、max-lines lintの上限を超えた。
+- **影響**：lintのみが停止し、画像生成の実行や保存済みデータには影響しなかった。
+- **修正**：入力画面を`workspace-input-view.tsx`へ分離し、Workspaceには状態遷移と呼び出しだけを残した。
+- **再発防止**：画面状態と表示部品を同一ファイルへ積み増さず、表示部品は独立した単位で分ける。
+
+## 2026-08-29 Windowsでcontrol-plane dry-runが再度終了コード3221226505
+
+- **何が起きたか**：個人PWA画像修正の全体buildで、変更していない`apps/control-plane`の`wrangler deploy --dry-run`がWindows固有の終了コード`3221226505`で停止した。
+- **影響**：Webの画像処理buildは単独で完走しており、今回のWebコード、Provider、秘密値には影響しない。
+- **対応**：Web build、smoke、E2Eを対象範囲の証拠として個別に完走した。control-planeの合格証拠は既存方針どおりLinux CIまたはCloudflare実行環境を使う。
+- **再発防止**：PWAのみの変更でWindows control-plane終了コードを画像機能の不合格へ混同しない。一方でCIではcontrol-plane jobを省略しない。

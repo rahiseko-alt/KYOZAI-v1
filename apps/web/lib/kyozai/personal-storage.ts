@@ -1,4 +1,5 @@
 import type { RenderedSlideImage } from "./image-types";
+import type { ImageModelId } from "./image-models";
 import type { TeachingPackage } from "./types";
 
 const DATABASE_NAME = "kyozai-personal-pwa";
@@ -10,6 +11,8 @@ type StoredPackage = {
   savedAt: number;
   package: TeachingPackage;
   images: RenderedSlideImage[];
+  renderGrant?: string;
+  imageModel?: ImageModelId;
 };
 
 function openDatabase(): Promise<IDBDatabase | undefined> {
@@ -22,25 +25,25 @@ function openDatabase(): Promise<IDBDatabase | undefined> {
   });
 }
 
-export async function savePersonalPackage(packageValue: TeachingPackage, images: RenderedSlideImage[]) {
+export async function savePersonalPackage(packageValue: TeachingPackage, images: RenderedSlideImage[], render?: { renderGrant: string; imageModel: ImageModelId }) {
   const database = await openDatabase();
   if (!database) return;
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite");
-    transaction.objectStore(STORE_NAME).put({ key: PACKAGE_KEY, savedAt: Date.now(), package: packageValue, images } satisfies StoredPackage);
+    transaction.objectStore(STORE_NAME).put({ key: PACKAGE_KEY, savedAt: Date.now(), package: packageValue, images, ...render } satisfies StoredPackage);
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error ?? new Error("教材を保存できませんでした。"));
   }).finally(() => database.close());
 }
 
-export async function loadPersonalPackage(): Promise<{ package: TeachingPackage; images: RenderedSlideImage[] } | undefined> {
+export async function loadPersonalPackage(): Promise<{ package: TeachingPackage; images: RenderedSlideImage[]; renderGrant?: string; imageModel?: ImageModelId } | undefined> {
   const database = await openDatabase();
   if (!database) return undefined;
   return await new Promise<StoredPackage | undefined>((resolve, reject) => {
     const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(PACKAGE_KEY);
     request.onsuccess = () => resolve(request.result as StoredPackage | undefined);
     request.onerror = () => reject(request.error ?? new Error("保存済み教材を読み込めませんでした。"));
-  }).finally(() => database.close()).then((stored) => stored ? { package: stored.package, images: stored.images } : undefined);
+  }).finally(() => database.close()).then((stored) => stored ? { package: stored.package, images: stored.images, renderGrant: stored.renderGrant, imageModel: stored.imageModel } : undefined);
 }
 
 export async function clearPersonalPackage() {

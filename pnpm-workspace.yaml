@@ -7,8 +7,10 @@ overrides:
   "nanoid@>=4.0.0 <5.1.16": "5.1.16"
 allowBuilds:
   '@swc/core': false
+  '@google/genai': false
   cbor-extract: false
   esbuild: true
+  protobufjs: false
   sharp: true
   workerd: true
   unrs-resolver: true

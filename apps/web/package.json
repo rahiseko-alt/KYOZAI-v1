@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@google/genai": "^2.19.0",
     "@supabase/supabase-js": "2.112.4",
     "htmlparser2": "10.1.0",
     "jose": "5.10.0",

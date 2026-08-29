@@ -3,6 +3,8 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST } from "../app/api/render-slide/route";
+import { publicErrorResponse } from "../lib/kyozai/http-errors";
+import { imagePipelineError } from "../lib/kyozai/image-pipeline-error";
 import { isImageModelId } from "../lib/kyozai/image-models";
 import { buildSlideImagePrompt } from "../lib/kyozai/image-prompt";
 import { mockRenderedSlide, renderValidatedSlide } from "../lib/kyozai/image-renderer";
@@ -100,13 +102,12 @@ describe("画像生成工程", () => {
     vi.unstubAllEnvs();
   });
 
-  it("Gemini公式contractで1枚を生成し、QA不合格ページだけ1回再生成する", async () => {
+  it("Gemini公式SDK contractで1枚を生成し、QA不合格ページだけ1回再生成する", async () => {
     vi.stubEnv("GEMINI_API_KEY", "test-key");
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const jpeg = await fixtureImage(1376, 768, "jpeg");
     const geminiResponse = () => new Response(JSON.stringify({
-      status: "completed",
-      steps: [{ type: "model_output", content: [{ type: "image", mime_type: "image/jpeg", data: jpeg.toString("base64") }] }],
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }] } }],
     }), { status: 200, headers: { "Content-Type": "application/json" } });
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(geminiResponse())
@@ -119,19 +120,35 @@ describe("画像生成工程", () => {
 
     expect(image).toMatchObject({ attemptCount: 2, providerModel: "gemini-3.1-flash-image", providerQuality: "1K", qaModel: "gpt-5.5" });
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    const firstRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { model: string; input: unknown[]; response_format: Record<string, unknown>; tools?: unknown };
-    expect(firstRequest).toMatchObject({ model: "gemini-3.1-flash-image", response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: "16:9", image_size: "1K" } });
-    expect(firstRequest.response_format).not.toHaveProperty("delivery");
+    const firstRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { contents?: unknown[]; generationConfig?: Record<string, unknown>; tools?: unknown };
+    expect(firstRequest).toMatchObject({ generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "16:9", imageSize: "1K" } } });
+    expect(firstRequest.contents).toHaveLength(1);
     expect(firstRequest).not.toHaveProperty("tools");
   });
 
-  it("Gemini公式SDK形のoutput_image応答と16:9の1K寸法を受け入れる", async () => {
+  it("画像pipelineの失敗を本文や秘密値を出さず段階とrequest IDで返す", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = publicErrorResponse(
+      imagePipelineError({ stage: "image_qa_response", provider: "openai", model: "gpt-5.5" }, "画像QAの応答形式を確認できませんでした。", new Error("sensitive-source-value")),
+      "fallback",
+    );
+    const payload = await response.json() as { stage?: string; requestId?: string; error?: string };
+    expect(response.status).toBe(502);
+    expect(payload).toMatchObject({ stage: "image_qa_response", error: "fallback" });
+    expect(payload.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(JSON.stringify(payload)).not.toContain("sensitive-source-value");
+    expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('"stage":"image_qa_response"'));
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain("sensitive-source-value");
+    errorLog.mockRestore();
+  });
+
+  it("Gemini公式SDK形のinlineData応答と16:9の1K寸法を受け入れる", async () => {
     vi.stubEnv("GEMINI_API_KEY", "test-key");
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const jpeg = await fixtureImage(1024, 576, "jpeg");
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        output_image: { mime_type: "image/jpeg", data: jpeg.toString("base64") },
+        candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }] } }],
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(qaResponse(true));
     vi.stubGlobal("fetch", fetchMock);
@@ -188,8 +205,7 @@ describe("画像生成工程", () => {
     const jpeg = await sharp(noisy, { raw: { width: 1024, height: 576, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
     vi.stubGlobal("fetch", vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        status: "completed",
-        steps: [{ type: "model_output", content: [{ type: "image", mime_type: "image/jpeg", data: jpeg.toString("base64") }] }],
+        candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }] } }],
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(qaResponse(true)));
 

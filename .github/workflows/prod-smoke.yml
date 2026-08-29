@@ -17,8 +17,8 @@ env:
   MARKER: "資料を入れたら、教材準備は終わり。"
 
 jobs:
-  production-lockdown:
-    name: portfolio 200 + generation locked
+  personal-pwa-availability:
+    name: personal PWA available + non-billing schema smoke
     runs-on: ubuntu-latest
     steps:
       - name: Wait for the production deployment of this commit
@@ -38,12 +38,13 @@ jobs:
           echo "FAIL: production did not deploy ${EXPECTED_SHA} within 3 minutes"
           exit 1
 
-      - name: Check portfolio page and HSTS
+      - name: Check personal PWA page and HSTS
         run: |
           code=$(curl -sS -D headers.txt -o body.html -w '%{http_code}' --max-time 30 "${PROD_URL}")
           test "${code}" = "200"
           grep -qF -- "${MARKER}" body.html
-          grep -qF -- "生成機能は現在、一般公開していません" body.html
+          grep -qF -- "公開体験版" body.html
+          ! grep -qF -- "生成機能は現在、一般公開していません" body.html
           grep -iq '^strict-transport-security:' headers.txt
 
       - name: Check health metadata
@@ -55,17 +56,20 @@ jobs:
           test "$(printf '%s' "${body}" | jq -r .environment)" = "production"
           test "$(printf '%s' "${body}" | jq -r .commitSha)" = "${EXPECTED_SHA}"
 
-      - name: Check generation APIs are unavailable in production
+      - name: Check generation APIs reject invalid input without provider use
         run: |
-          check_locked() {
+          check_invalid() {
             path="$1"
-            content_type="$2"
-            payload="$3"
-            code=$(curl -sS -o response.json -w '%{http_code}' --max-time 30 \
-              -X POST -H "Content-Type: ${content_type}" --data-binary "${payload}" "${PROD_URL}${path}")
+            if [ "${path}" = "/api/generate" ]; then
+              code=$(curl -sS -o response.json -w '%{http_code}' --max-time 30 -X POST -F 'request=' "${PROD_URL}${path}")
+            else
+              code=$(curl -sS -o response.json -w '%{http_code}' --max-time 30 \
+                -X POST -H 'Content-Type: application/json' --data-binary '{}' "${PROD_URL}${path}")
+            fi
             echo "${path}: HTTP ${code}"
-            test "${code}" = "404"
+            test "${code}" = "400"
+            test "$(jq -r '.code // empty' response.json)" = "BAD_REQUEST"
           }
-          check_locked /api/generate multipart/form-data ""
-          check_locked /api/revise application/json '{}'
-          check_locked /api/render-slide application/json '{}'
+          check_invalid /api/generate
+          check_invalid /api/revise
+          check_invalid /api/render-slide
