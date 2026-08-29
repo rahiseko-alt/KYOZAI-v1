@@ -21,6 +21,12 @@ blind evidence、provider usage突合、物理削除記録で判定する。SaaS
 
 個人PWAのProductionレート制限は、追加料金の発生する共有Redisを前提にせず、プロセス内の短期バケットで制限する。SaaS／Previewの分散レート制限と秘密鍵要件は維持する。署名鍵などの秘密設定が無い場合は、個人PWAでも生成をfail-closedにする。
 
+## 2026-08-29 個人PWAの署名鍵省略
+
+利用者が「本人だけが使う個人PWAとして今すぐ使えるようにする」と明示したため、個人PWAフラグが有効なProductionでは、画像render grantのHMAC署名用秘密鍵を必須としない。代わりに、15分で失効し、教材hash・画像model・slide数に結び付く非署名grantを使う。これは不特定多数向けの費用保護や改ざん防止を提供しない。SaaS／Previewは従来どおり専用署名鍵を必須とし、利用者のAPIキーをブラウザーへ渡さない制約は維持する。
+
+個人PWAの公開は、同経路のunit test、typecheck、lint、build、smoke、E2E、CIが合格した時点でG1のSaaS実証と切り離してmainへ反映する。G1〜G6のSaaS向け実Provider・所有者分離・artifact evidenceの不足は解消済みとは扱わず、SaaSを再開するまで凍結する。
+
 ## AS-IS／TO-BE
 
 | AS-ISの不足 | TO-BE | Gate |

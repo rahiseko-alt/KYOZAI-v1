@@ -12,7 +12,7 @@
     "deliveryMode": { "enum": ["personal_pwa", "saas"] },
     "saasFrozen": { "type": "boolean" },
     "activeGate": { "type": ["string", "null"], "pattern": "^G[0-6]$" },
-    "productionGeneration": { "enum": ["locked_404", "authenticated_enabled"] },
+    "productionGeneration": { "enum": ["locked_404", "personal_pwa_enabled", "authenticated_enabled"] },
     "fixtures": { "type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
     "gates": {
       "type": "array",

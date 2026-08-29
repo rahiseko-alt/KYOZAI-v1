@@ -15,8 +15,9 @@ async function main() {
   if (contract.id !== "kyozai-skill-app-parity" || !["in_progress", "completed"].includes(contract.status)) throw new Error("Parity goal status is invalid");
   if (JSON.stringify(contract.fixtures) !== JSON.stringify(expectedFixtures)) throw new Error("The five required parity fixtures changed");
   if (JSON.stringify(contract.gates?.map((gate) => gate.id)) !== JSON.stringify(expectedGates)) throw new Error("Gate order must remain G0 through G6");
-  if (contract.status === "in_progress" && (!expectedGates.includes(contract.activeGate) || contract.productionGeneration !== "locked_404")) {
-    throw new Error("An incomplete parity goal requires one active Gate and the Production 404 lock");
+  const expectedInProgressGeneration = contract.deliveryMode === "personal_pwa" ? "personal_pwa_enabled" : "locked_404";
+  if (contract.status === "in_progress" && (!expectedGates.includes(contract.activeGate) || contract.productionGeneration !== expectedInProgressGeneration)) {
+    throw new Error("An incomplete parity goal requires one active Gate and the configured Production generation state");
   }
   if (contract.status === "completed" && (contract.activeGate !== null || contract.productionGeneration !== "authenticated_enabled")) {
     throw new Error("A completed parity goal requires no active Gate and authenticated Production generation");

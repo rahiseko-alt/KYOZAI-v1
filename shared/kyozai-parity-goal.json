@@ -6,7 +6,7 @@
   "deliveryMode": "personal_pwa",
   "saasFrozen": true,
   "activeGate": "G1",
-  "productionGeneration": "locked_404",
+  "productionGeneration": "personal_pwa_enabled",
   "fixtures": ["direct_text", "long_pdf", "youtube_captioned", "reference_design", "natural_language_revision"],
   "gates": [
     {
@@ -61,7 +61,7 @@
       "status": "pending",
       "goalContribution": "Compare all five real fixtures and reopen authenticated Production generation.",
       "acceptanceEvidence": ["five_fixture_blind_evidence", "production_pc_mobile_e2e", "production_url_and_commit_sha"],
-      "gaps": ["production_generation_locked", "unverified_real_package_provenance"]
+      "gaps": ["personal_pwa_real_provider_evidence", "unverified_real_package_provenance"]
     }
   ],
   "outOfScopeUntilGoal": ["kyozai_support", "kyozai_movie", "kyozai_orchestrator", "pptx_export", "advanced_manual_editor"]

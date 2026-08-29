@@ -145,3 +145,11 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 影響: R2 private artifactを使うPreview実Provider縦断は、R2が有効化されるまで実施不可。Production生成404ロックと新規jobのfail-closedは維持する。
 - 次の判断: 無料枠内で課金上限を機械的に監視できるCloudflare構成が確認できた場合のみ再審議する。秘密値や支払情報は記録しない。
 - 状態: blocked_by_billing_decision
+
+## 2026-08-29 個人PWA render grantの署名鍵省略
+
+- 利用者決定: 本人だけが利用する個人PWAを直ちに使えるようにする。署名鍵は生成品質に影響せず、SaaS化は凍結済みである。
+- 変更: `KYOZAI_PERSONAL_PWA_ENABLED=1`のProductionだけ、教材hash・画像model・slide数・15分有効期限を含む非署名grantを許可する。
+- 影響: 公開URLを他者へ共有した場合のgrant改ざん・provider費用保護は提供しない。SaaS／Previewは既存の専用HMAC署名を維持する。
+- 復帰条件: 不特定多数向け提供を再開する前に、この例外を削除し、専用署名鍵と分散制限・所有者分離の実証を復帰する。
+- 状態: implemented_under_explicit_personal_pwa_decision
