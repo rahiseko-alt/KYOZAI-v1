@@ -71,7 +71,7 @@ port_is_listening() {
 }
 
 port_owner_pid() {
-  netstat.exe -ano | awk -v port="${PORT}" '$1 == "TCP" && $4 == "LISTENING" { count = split($2, parts, ":"); if (parts[count] == port) { print $5; exit } }'
+  netstat.exe -ano | awk -v port="${PORT}" '$1 == "TCP" && $4 == "LISTENING" { count = split($2, parts, ":"); if (parts[count] == port && !found) { print $5; found = 1 } }'
 }
 
 stop_worker() {
