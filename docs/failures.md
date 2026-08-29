@@ -1831,3 +1831,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
   recursive buildはcontrol-planeの異常終了により失敗扱いとなった。
 - **修正状況**：既知のローカル環境問題として成功扱いにせず、Linux CIのbuild証拠で判定する。実装側のtypecheck、lint、unit test、local D1 fixtureは別途実行する。
 - **再発防止**：この環境でWorker buildを実行した場合は、exit codeとCIのLinux結果を必ず分けて記録する。
+
+## 2026-08-29 Cloudflare Cron cleanupのHTTP methodがVercel routeと一致していなかった
+
+- **何が起きたか**：control-plane schedulerはdispatchとcleanupをPOSTで呼ぶが、cleanup routeはGETだけを公開していた。
+- **影響**：Cloudflare Cronからcleanupを起動すると405となり得た。Preview/ProductionのCron、D1/R2、利用者データ、秘密値への実影響はない。
+- **修正**：cleanup処理を共通化し、Vercel Cron用GETとCloudflare scheduler用POSTの両方を同じ認証境界で受けるようにした。
+- **再発防止**：scheduler targetごとにmethodを契約テストで確認し、Cron呼出し側とroute側を同時に変更する。
