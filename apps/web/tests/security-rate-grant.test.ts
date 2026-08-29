@@ -44,10 +44,21 @@ describe("画像生成grantの鍵分離", () => {
   it("productionではE2E runtimeと署名鍵を使用できない", () => {
     vi.stubEnv("KYOZAI_E2E_MODE", "1");
     vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("KYOZAI_PERSONAL_PWA_ENABLED", "0");
     vi.stubEnv("KYOZAI_RENDER_GRANT_SECRET", "");
     expect(isE2eRuntimeAllowed()).toBe(false);
     expect(e2eEphemeralSecret()).toBeUndefined();
     expect(() => issueRenderGrant(mockPackage, "gpt-image-2-medium")).toThrow("署名設定がありません");
+  });
+
+  it("個人PWAでは署名鍵なしで短期package bindingを発行する", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("KYOZAI_PERSONAL_PWA_ENABLED", "1");
+    vi.stubEnv("KYOZAI_RENDER_GRANT_SECRET", "");
+    const grant = issueRenderGrant(mockPackage, "gpt-image-2-medium");
+    expect(grant).toMatch(/^pwa\.[A-Za-z0-9_-]+$/);
+    expect(() => verifyRenderGrant(grant, mockPackage, "gpt-image-2-medium")).not.toThrow();
+    expect(() => verifyRenderGrant(grant, mockPackage, "gemini-3.1-flash-lite-image")).toThrow("一致しません");
   });
 
   it("Preview E2Eの鍵はprocess内でのみ生成され、公開固定値を持たない", () => {
@@ -121,6 +132,18 @@ describe("分散レート制限", () => {
       status: 503,
       code: "SERVICE_UNAVAILABLE",
     });
+  });
+
+  it("個人PWAのProductionは共有Redisなしでプロセス内制限を使う", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("KYOZAI_PERSONAL_PWA_ENABLED", "1");
+    vi.stubEnv("PROCESS_PARITY_PIPELINE_ENABLED", "1");
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>());
+    const request = new Request("https://example.test/api/generate", {
+      headers: { "x-forwarded-for": "198.51.100.77" },
+    });
+    await expect(enforceRateLimit(request, "generate")).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("render-slideはgrantとslideの再試行枠も同じ原子操作に含める", async () => {

@@ -8,7 +8,7 @@
 - 親Gate: G1
 - ゴールへの寄与: 直接入力のjobを、所有者分離された永続状態、private artifact、定期起動、
   provider費用上限を通して実Providerへ安全に到達させる。
-- この設計の合格証拠: ローカルのWorker/D1契約テスト、PreviewのD1/R2 readback、Cloudflare Cronから
+- この設計の合格証拠: ローカルのWorker/D1契約テスト、PreviewのD1 readback、Cloudflare Cronから
   Vercel dispatch/cleanupが起動した記録、Access認証済みの2所有者分離E2E。最終G1合格には加えて
   実Provider fixture、故障回復、usage突合、PNG/ZIP hash一致が必要である。
 
@@ -84,14 +84,14 @@ errorを返す。R2 Freeは月あたりstorage 10GB-month、Class A 100万、Cla
    既存のprovider checkpoint再読込とstage idempotencyを維持する。
 5. Cloudflare Cronから認証済みVercel dispatch/cleanupを実行し、lease回復・cancel settlement・物理削除を
    Previewで確認する。
-6. disposable Previewでdirect-textの実Provider fixtureを完走し、D1 provider usage、R2 artifact bytes、
+6. disposable Previewでdirect-textの実Provider fixtureを完走し、D1 provider usage、checkpoint metadata、
    PNG/ZIP hash、2所有者E2E、故障注入行列を証拠として残す。
 
 ## 実行前の外部設定
 
 利用者または運用者がCloudflareで直接行う（秘密値はこの会話へ入力しない）。
 
-1. Workers Free account、Zero Trust organization、D1 database、private R2 bucketを作成する。
+1. Workers Free account、Zero Trust organization、D1 databaseを作成する。R2は有料契約を伴うため作成しない。
 2. Access One-time PIN identity providerと、G1 fixture利用者だけを許可するAccess applicationを作成する。
 3. Access保護されたWorker hostnameをVercel Previewの正規入口に設定する。
 4. CloudflareとVercelへ、名前だけを`.env.example`に記載する専用secretを直接登録する。

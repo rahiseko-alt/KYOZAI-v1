@@ -72,7 +72,7 @@ describe("provider試行の回収", () => {
     };
   });
 
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
   it("provider成功結果を保存し、別stage runでは呼び直さず回収する", async () => {
     const first = await withProviderAttemptContext(context, () => beginProviderAttempt(input));
@@ -166,5 +166,46 @@ describe("provider試行の回収", () => {
       "reserve_kyozai_provider_attempt",
       "settle_kyozai_provider_attempt",
     ]);
+  });
+
+  it("Cloudflare gatewayではprivate R2 checkpointから回収し、Supabaseを呼ばない", async () => {
+    vi.stubEnv("KYOZAI_CLOUDFLARE_STATE_ENABLED", "1");
+    vi.stubEnv("KYOZAI_CONTROL_PLANE_URL", "https://control.example");
+    vi.stubEnv("KYOZAI_CONTROL_PLANE_TOKEN", "test-only-token");
+    const checkpoint = Buffer.from("cloudflare checkpoint");
+    let firstFingerprint = "";
+    let settled = false;
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      const address = String(url);
+      if (address.endsWith("/providers/commands")) {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        if (body.command === "reserve") {
+          firstFingerprint ||= String(body.requestFingerprint);
+          return Response.json(settled
+            ? { charge_state: "confirmed", result_storage_path: `${context.jobId}/${context.revisionId}/provider-results/${firstFingerprint}.json`, result_sha256: createHash("sha256").update(checkpoint).digest("hex"), result_byte_size: checkpoint.length, shouldCall: false }
+            : { charge_state: "reserved", result_storage_path: null, result_sha256: null, result_byte_size: null, shouldCall: true });
+        }
+        settled = true;
+        return Response.json({ settled: true });
+      }
+      if (address.endsWith("/artifacts/commands")) {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        if (body.command === "read") return Response.json({ artifact: { metadata: {}, storage_path: "fixture/checkpoint.json", sha256: createHash("sha256").update(checkpoint).digest("hex") } });
+        return Response.json({ artifactId: "provider-checkpoint" });
+      }
+      if (address.endsWith("/bytes") && init?.method === "PUT") return Response.json({ artifactId: "provider-checkpoint", byteSize: checkpoint.length });
+      if (address.endsWith("/bytes")) return new Response(checkpoint, { status: 200 });
+      throw new Error(`unexpected gateway route: ${address}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    const initial = await withProviderAttemptContext(context, () => beginProviderAttempt(input));
+    if (!initial.tracked) throw new Error("provider attempt was not tracked");
+    await confirmProviderAttempt(initial, checkpoint);
+    const recovered = await withProviderAttemptContext({ ...context, stageRunId: "00000000-0000-4000-8000-000000000006" }, () => beginProviderAttempt(input));
+
+    expect(recovered).toMatchObject({ tracked: true, recovered: checkpoint });
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/providers/commands"))).toBe(true);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

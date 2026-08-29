@@ -1,5 +1,4 @@
 "use client";
-
 import {
   BookOpenText,
   Check,
@@ -14,24 +13,21 @@ import {
   UploadCloud,
   Users,
 } from "lucide-react";
-import { useRef, useState } from "react";
-
-import { HOME_HEADING } from "@/lib/content";
-import { readPackageResponse, readRenderedSlideResponse } from "@/lib/kyozai/api-client";
-import type { ImageModelId } from "@/lib/kyozai/image-models";
-import type { RenderedSlideImage } from "@/lib/kyozai/image-types";
-import { createMontagePng } from "@/lib/kyozai/montage";
-import { createTeachingPackageZip } from "@/lib/kyozai/package-zip";
-import type { TeachingPackage } from "@/lib/kyozai/types";
+import { useEffect, useRef, useState } from "react";
+import { HOME_HEADING } from "../lib/content";
+import { readPackageResponse, readRenderedSlideResponse } from "../lib/kyozai/api-client";
+import type { ImageModelId } from "../lib/kyozai/image-models";
+import type { RenderedSlideImage } from "../lib/kyozai/image-types";
+import { createMontagePng } from "../lib/kyozai/montage";
+import { createTeachingPackageZip } from "../lib/kyozai/package-zip";
+import { clearPersonalPackage, loadPersonalPackage, savePersonalPackage } from "../lib/kyozai/personal-storage";
+import type { TeachingPackage } from "../lib/kyozai/types";
 import { AppHeader, DevBadge } from "./app-header";
 import { GeneratingView, type GenerationProgress } from "./generating-view";
 import { ImageModelPicker } from "./image-model-picker";
 import { SlidePreview } from "./slide-preview";
-
 type Step = "input" | "generating" | "complete";
 type Tab = "slides" | "scenario" | "faq" | "quiz";
-
-
 export function Workspace() {
   const [step, setStep] = useState<Step>("input");
   const [files, setFiles] = useState<File[]>([]);
@@ -47,7 +43,14 @@ export function Workspace() {
   const [revision, setRevision] = useState("");
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-
+  useEffect(() => {
+    void loadPersonalPackage().then((saved) => {
+      if (!saved || saved.images.length !== saved.package.slides.length) return;
+      setResult(saved.package);
+      setImages(saved.images);
+      setStep("complete");
+    }).catch(() => undefined);
+  }, []);
   const onFiles = (incoming: FileList | null) => {
     if (!incoming) return;
     const accepted = Array.from(incoming).filter((file) => file.size <= 2 * 1024 * 1024 && (["application/pdf", "text/plain", "text/markdown"].includes(file.type) || /\.(txt|md)$/i.test(file.name)));
@@ -55,7 +58,6 @@ export function Workspace() {
     if (accepted.length !== incoming.length) setError("PDF・TXT・Markdownの2MB以下のファイルを指定してください。");
     else setError("");
   };
-
   const renderImages = async (next: TeachingPackage, modelId: ImageModelId, renderGrant: string, previous?: TeachingPackage, previousImages: RenderedSlideImage[] = []) => {
     const retained = new Map<number, RenderedSlideImage>();
     if (previous) {
@@ -83,7 +85,6 @@ export function Workspace() {
     if (complete.length !== next.slides.length) throw new Error("完成画像が全ページ揃わなかったため、旧版を維持しました。");
     return complete;
   };
-
   const generate = async () => {
     if (!files.length && !sourceText.trim() && !sourceUrl.trim()) {
       setError("資料、URL、またはテキストを1つ以上追加してください。");
@@ -110,6 +111,7 @@ export function Workspace() {
       const nextImages = await renderImages(next, selectedModel, generated.renderGrant);
       setResult(next);
       setImages(nextImages);
+      void savePersonalPackage(next, nextImages).catch(() => undefined);
       setImageModel(null);
       setSlideIndex(0);
       setStep("complete");
@@ -118,7 +120,6 @@ export function Workspace() {
       setStep("input");
     }
   };
-
   const revise = async () => {
     if (!result || revision.trim().length < 3) return;
     if (!imageModel) {
@@ -141,6 +142,7 @@ export function Workspace() {
       const nextImages = await renderImages(next, selectedModel, revised.renderGrant, current, currentImages);
       setResult(next);
       setImages(nextImages);
+      void savePersonalPackage(next, nextImages).catch(() => undefined);
       setImageModel(null);
       setRevision("");
       setSlideIndex(0);
@@ -150,7 +152,6 @@ export function Workspace() {
       setStep("complete");
     }
   };
-
   const download = async () => {
     if (!result) return;
     try {
@@ -165,7 +166,6 @@ export function Workspace() {
       setError(caught instanceof Error ? caught.message : "納品ZIPを作成できませんでした。");
     }
   };
-
   return (
     <main className="app-shell">
       <AppHeader menuOpen={menuOpen} onMenu={() => setMenuOpen((value) => !value)} />
@@ -203,19 +203,16 @@ export function Workspace() {
           setImageModel={setImageModel}
           revise={revise}
           download={download}
-          restart={() => { setResult(null); setImages([]); setImageModel(null); setStep("input"); setError(""); }}
+          restart={() => { void clearPersonalPackage().catch(() => undefined); setResult(null); setImages([]); setImageModel(null); setStep("input"); setError(""); }}
         />
       )}
     </main>
   );
 }
 type InputProps = {
-  files: File[]; sourceUrl: string; sourceText: string; request: string; error: string; imageModel: ImageModelId | null;
-  onFiles: (files: FileList | null) => void;
-  setSourceUrl: (value: string) => void; setSourceText: (value: string) => void; setRequest: (value: string) => void;
-  setImageModel: (value: ImageModelId) => void; generate: () => void;
+  files: File[]; sourceUrl: string; sourceText: string; request: string; error: string; imageModel: ImageModelId | null; onFiles: (files: FileList | null) => void;
+  setSourceUrl: (value: string) => void; setSourceText: (value: string) => void; setRequest: (value: string) => void; setImageModel: (value: ImageModelId) => void; generate: () => void;
 };
-
 function InputView(props: InputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -272,7 +269,6 @@ type CompleteProps = {
   setTab: (tab: Tab) => void; setSlideIndex: React.Dispatch<React.SetStateAction<number>>; setRevision: (value: string) => void;
   setImageModel: (value: ImageModelId) => void; revise: () => void; download: () => Promise<void>; restart: () => void;
 };
-
 function CompleteView(props: CompleteProps) {
   const { result } = props;
   return (

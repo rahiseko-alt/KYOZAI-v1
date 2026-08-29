@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   completed_at TEXT,
   created_at TEXT NOT NULL,
   UNIQUE (revision_id, stage, slide_number, attempt),
-  CHECK ((status = 'running') = (started_at IS NOT NULL)),
+  CHECK (status <> 'running' OR started_at IS NOT NULL),
   CHECK ((status IN ('passed', 'failed', 'skipped')) = (completed_at IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS stage_runs_lease_idx ON stage_runs (status, lease_expires_at);
@@ -143,7 +143,11 @@ CREATE TABLE IF NOT EXISTS usage_events (
   result_sha256 TEXT,
   result_byte_size INTEGER,
   created_at TEXT NOT NULL,
-  UNIQUE (job_id, request_fingerprint)
+  UNIQUE (job_id, request_fingerprint),
+  CHECK (
+    (result_storage_path IS NULL AND result_sha256 IS NULL AND result_byte_size IS NULL)
+    OR (result_storage_path IS NOT NULL AND length(result_sha256) = 64 AND result_byte_size > 0)
+  )
 );
 CREATE INDEX IF NOT EXISTS usage_events_job_idx ON usage_events (job_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS usage_events_recovery_idx ON usage_events (charge_state, result_storage_path);
@@ -152,7 +156,7 @@ CREATE TABLE IF NOT EXISTS workflow_dispatches (
   id TEXT PRIMARY KEY,
   job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
   revision_id TEXT NOT NULL REFERENCES job_revisions(id) ON DELETE CASCADE,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'dispatched', 'failed', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'dispatched', 'completed', 'failed', 'cancelled')),
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   last_error_code TEXT,
   next_attempt_at TEXT NOT NULL,
@@ -160,6 +164,8 @@ CREATE TABLE IF NOT EXISTS workflow_dispatches (
   workflow_run_id TEXT,
   lease_owner TEXT,
   lease_expires_at TEXT,
+  started_at TEXT,
+  completed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

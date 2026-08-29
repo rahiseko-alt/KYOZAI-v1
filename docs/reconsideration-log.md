@@ -129,3 +129,27 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 影響: Supabase schedulerのPreview実証は実施しない。Cloudflareへの置換範囲、認証方式、所有者分離、Free上限でのfail-closedをG1で実証する。
 - 次の判断: Cloudflare Freeの実利用条件を確認し、上限超過時に課金せず止まる構成を実装前に固定する。
 - 状態: superseded_by_user_decision
+
+## 2026-08-29 Windows Wrangler fixture cleanupの延期
+
+- 発見Gate: G1
+- 症状: 実Worker/D1のdirect-text機能検証は全項目を通過するが、Windows版Wranglerのchild processが終了後もportを解放しない場合がある。
+- 判断: G1のPreview実Provider、Access所有者分離、usage突合の外部証拠を阻害しない小問題として、G6完了後に再審議する。
+- 実施済み: 起動時に所有PIDを記録し、そのprocess treeだけを停止するcleanup、port解放確認、失敗履歴を追加した。
+- 状態: deferred_after_g6
+
+## 2026-08-29 R2契約の課金回避決定
+
+- 発見Gate: G1
+- 利用者決定: 既存カードを使うR2 subscriptionは契約せず、追加料金を発生させない。
+- 影響: R2 private artifactを使うPreview実Provider縦断は、R2が有効化されるまで実施不可。Production生成404ロックと新規jobのfail-closedは維持する。
+- 次の判断: 無料枠内で課金上限を機械的に監視できるCloudflare構成が確認できた場合のみ再審議する。秘密値や支払情報は記録しない。
+- 状態: blocked_by_billing_decision
+
+## 2026-08-29 個人PWA render grantの署名鍵省略
+
+- 利用者決定: 本人だけが利用する個人PWAを直ちに使えるようにする。署名鍵は生成品質に影響せず、SaaS化は凍結済みである。
+- 変更: `KYOZAI_PERSONAL_PWA_ENABLED=1`のProductionだけ、教材hash・画像model・slide数・15分有効期限を含む非署名grantを許可する。
+- 影響: 公開URLを他者へ共有した場合のgrant改ざん・provider費用保護は提供しない。SaaS／Previewは既存の専用HMAC署名を維持する。
+- 復帰条件: 不特定多数向け提供を再開する前に、この例外を削除し、専用署名鍵と分散制限・所有者分離の実証を復帰する。
+- 状態: implemented_under_explicit_personal_pwa_decision

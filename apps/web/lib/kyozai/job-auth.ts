@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { createLocalJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 import { isPublicProduction } from "./generation-access";
 import { routeUnavailable, unauthorized } from "./http-errors";
@@ -9,18 +10,103 @@ export type AuthenticatedJobUser = {
   email?: string;
 };
 
+type Env = Record<string, string | undefined>;
+
+type CloudflareAccessConfig = {
+  issuer: string;
+  audience: string;
+};
+
+const accessJwksByIssuer = new Map<string, { expiresAt: number; keySet: ReturnType<typeof createLocalJWKSet> }>();
+const accessJwksCacheMilliseconds = 5 * 60_000;
+
+/** Access is opt-in until the Preview Access application has been configured. */
+export function cloudflareAccessEnabled(env: Env = process.env): boolean {
+  return env.KYOZAI_CLOUDFLARE_ACCESS_ENABLED === "1";
+}
+
+function unavailableAccess(): never {
+  // Deliberately share the nonexistence response with an unowned job. The caller
+  // must not be able to distinguish an Access bypass from another user's job.
+  throw routeUnavailable();
+}
+
+function readCloudflareAccessConfig(env: Env): CloudflareAccessConfig {
+  const rawIssuer = env.KYOZAI_CLOUDFLARE_ACCESS_TEAM_DOMAIN?.trim();
+  const audience = env.KYOZAI_CLOUDFLARE_ACCESS_AUDIENCE?.trim();
+  if (!rawIssuer || !audience || audience.length > 512 || /\s/.test(audience)) unavailableAccess();
+
+  let url: URL;
+  try { url = new URL(rawIssuer); } catch { unavailableAccess(); }
+  if (
+    url.protocol !== "https:"
+    || !url.hostname.endsWith(".cloudflareaccess.com")
+    || url.port
+    || url.username
+    || url.password
+    || url.pathname !== "/"
+    || url.search
+    || url.hash
+  ) unavailableAccess();
+  return { issuer: url.origin, audience };
+}
+
+async function accessJwks(config: CloudflareAccessConfig) {
+  const existing = accessJwksByIssuer.get(config.issuer);
+  if (existing && existing.expiresAt > Date.now()) return existing.keySet;
+  const response = await fetch(`${config.issuer}/cdn-cgi/access/certs`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!response.ok) throw new Error("access_jwks_unavailable");
+  const jwks: unknown = await response.json();
+  if (!jwks || typeof jwks !== "object" || !Array.isArray((jwks as { keys?: unknown }).keys)) throw new Error("access_jwks_invalid");
+  const keySet = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
+  accessJwksByIssuer.set(config.issuer, { expiresAt: Date.now() + accessJwksCacheMilliseconds, keySet });
+  return keySet;
+}
+
+function accessUser(payload: JWTPayload): AuthenticatedJobUser {
+  const subject = typeof payload.sub === "string" ? payload.sub.trim() : "";
+  const email = typeof payload.email === "string" ? payload.email.trim() : "";
+  if (!subject || subject.length > 512 || !email || email.length > 320) unavailableAccess();
+  // Namespace Access identities so a JWT subject can never be confused with a
+  // legacy Supabase owner id while the two stores coexist during G1.
+  return { id: `cf-access:${subject}`, email };
+}
+
+/**
+ * Validates the Access assertion sent by Cloudflare before it reaches Vercel.
+ * Cloudflare documents the issuer as the team domain and serves rotated signing
+ * keys from `${teamDomain}/cdn-cgi/access/certs`.
+ */
+async function requireCloudflareAccessUser(request: Request, env: Env): Promise<AuthenticatedJobUser> {
+  const token = request.headers.get("cf-access-jwt-assertion")?.trim();
+  if (!token) unavailableAccess();
+  const config = readCloudflareAccessConfig(env);
+  try {
+    const { payload } = await jwtVerify(token, await accessJwks(config), {
+      algorithms: ["RS256"],
+      issuer: config.issuer,
+      audience: config.audience,
+    });
+    if (typeof payload.exp !== "number") unavailableAccess();
+    return accessUser(payload);
+  } catch {
+    unavailableAccess();
+  }
+}
+
 /**
  * Job endpoints accept Supabase access tokens only. The browser obtains this token
  * from Supabase Auth and sends it in Authorization; service-role credentials never
  * leave the server. Production remains intentionally unavailable.
  */
-export async function requireJobUser(request: Request): Promise<AuthenticatedJobUser> {
-  if (isPublicProduction()) throw routeUnavailable();
+export async function requireJobUser(request: Request, env: Env = process.env): Promise<AuthenticatedJobUser> {
+  if (isPublicProduction(env)) throw routeUnavailable();
+  if (cloudflareAccessEnabled(env)) return requireCloudflareAccessUser(request, env);
   const authorization = request.headers.get("authorization");
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
   if (!match?.[1]) throw unauthorized();
 
-  const config = readSupabasePublicConfig();
+  const config = readSupabasePublicConfig(env);
   const client = createClient(config.url, config.publishableKey, {
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     global: { headers: { Authorization: `Bearer ${match[1]}` } },

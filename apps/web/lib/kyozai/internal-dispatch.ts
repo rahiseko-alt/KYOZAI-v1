@@ -1,8 +1,9 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { createServerSupabaseClient } from "../supabase/server";
 import { start } from "workflow/api";
 import { durableKyozaiJobWorkflow } from "../../workflows/kyozai-job-workflow";
+import { cloudflareStateEnabled, sendControlPlaneCommand } from "./control-plane-client";
 
 export type ClaimedWorkflowDispatch = {
   id: string;
@@ -23,6 +24,11 @@ export class InternalDispatchError extends Error {
 }
 
 export async function settlePendingCancellations() {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneCommand<{ settled: number }>("jobs", { command: "settlePendingCancellations", now: new Date().toISOString(), limit: 25 });
+    if (!Number.isInteger(result.settled) || result.settled < 0) throw new InternalDispatchError("cancellation_settlement_failed");
+    return result.settled;
+  }
   const { data, error } = await createServerSupabaseClient().rpc("settle_pending_kyozai_cancellations");
   if (error || !Number.isInteger(data) || Number(data) < 0) throw new InternalDispatchError("cancellation_settlement_failed");
   return Number(data);
@@ -56,6 +62,12 @@ function asClaimedDispatch(value: unknown): ClaimedWorkflowDispatch | undefined 
 }
 
 export async function claimOneWorkflowDispatch(): Promise<ClaimedWorkflowDispatch | undefined> {
+  if (cloudflareStateEnabled()) {
+    const now = new Date(); const leaseOwner = randomUUID();
+    const result = await sendControlPlaneCommand<{ claimed: boolean; dispatch?: { id: string; job_id: string; revision_id: string; attempts: number; lease_owner: string } }>("dispatches", { command: "claim", leaseOwner, now: now.toISOString(), leaseExpiresAt: new Date(now.getTime() + 15 * 60_000).toISOString() });
+    if (!result.claimed || !result.dispatch) return undefined;
+    return { id: result.dispatch.id, jobId: result.dispatch.job_id, revisionId: result.dispatch.revision_id, attempts: result.dispatch.attempts, leaseOwner: result.dispatch.lease_owner };
+  }
   const { data, error } = await createServerSupabaseClient().rpc("claim_next_kyozai_workflow_dispatch");
   if (error) throw new InternalDispatchError("dispatch_claim_failed");
   const rows = Array.isArray(data) ? data : data ? [data] : [];
@@ -67,6 +79,9 @@ export async function claimOneWorkflowDispatch(): Promise<ClaimedWorkflowDispatc
 }
 
 export async function requeueWorkflowDispatch(dispatchId: string, leaseOwner: string, errorCode: string) {
+  if (cloudflareStateEnabled()) {
+    const now = new Date(); await sendControlPlaneCommand("dispatches", { command: "requeue", dispatchId, leaseOwner, errorCode, now: now.toISOString(), nextAttemptAt: new Date(now.getTime() + 30_000).toISOString() }); return;
+  }
   const { error } = await createServerSupabaseClient().rpc("requeue_kyozai_workflow_dispatch_v2", {
     p_dispatch_id: dispatchId,
     p_lease_owner: leaseOwner,
@@ -76,6 +91,9 @@ export async function requeueWorkflowDispatch(dispatchId: string, leaseOwner: st
 }
 
 export async function completeWorkflowDispatch(dispatchId: string, leaseOwner: string) {
+  if (cloudflareStateEnabled()) {
+    await sendControlPlaneCommand("dispatches", { command: "complete", dispatchId, leaseOwner, now: new Date().toISOString() }); return;
+  }
   const { data, error } = await createServerSupabaseClient().rpc("complete_kyozai_workflow_dispatch_v2", {
     p_dispatch_id: dispatchId,
     p_lease_owner: leaseOwner,
@@ -85,6 +103,11 @@ export async function completeWorkflowDispatch(dispatchId: string, leaseOwner: s
 
 export async function startClaimedWorkflow(dispatch: ClaimedWorkflowDispatch): Promise<string> {
   const run = await start(durableKyozaiJobWorkflow, [{ dispatchId: dispatch.id, jobId: dispatch.jobId, revisionId: dispatch.revisionId, leaseOwner: dispatch.leaseOwner }]);
+  if (cloudflareStateEnabled()) {
+    const now = new Date();
+    await sendControlPlaneCommand("dispatches", { command: "recordStarted", dispatchId: dispatch.id, leaseOwner: dispatch.leaseOwner, workflowRunId: run.runId, now: now.toISOString(), leaseExpiresAt: new Date(now.getTime() + 15 * 60_000).toISOString() });
+    return run.runId;
+  }
   const { data, error } = await createServerSupabaseClient().rpc("record_kyozai_workflow_started", {
     p_dispatch_id: dispatch.id,
     p_lease_owner: dispatch.leaseOwner,
@@ -116,6 +139,9 @@ export async function runOneInternalDispatch(): Promise<InternalDispatchResult> 
 }
 
 export async function renewWorkflowDispatchLease(dispatchId: string, leaseOwner: string) {
+  if (cloudflareStateEnabled()) {
+    const now = new Date(); await sendControlPlaneCommand("dispatches", { command: "renewLease", dispatchId, leaseOwner, now: now.toISOString(), leaseExpiresAt: new Date(now.getTime() + 15 * 60_000).toISOString() }); return;
+  }
   const { data, error } = await createServerSupabaseClient().rpc("renew_kyozai_workflow_dispatch_lease", {
     p_dispatch_id: dispatchId,
     p_lease_owner: leaseOwner,

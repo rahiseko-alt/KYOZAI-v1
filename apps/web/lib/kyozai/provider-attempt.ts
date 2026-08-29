@@ -1,7 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { createServerSupabaseClient } from "../supabase/server";
+import { cloudflareStateEnabled, sendControlPlaneCommand } from "./control-plane-client";
+import { readPrivateControlPlaneArtifact, writePrivateControlPlaneArtifact } from "./control-plane-artifacts";
 import { injectG1Fault } from "./g1-fault-injection";
 
 const ARTIFACT_BUCKET = "kyozai-artifacts";
@@ -49,16 +51,33 @@ function checkpointPath(context: ProviderAttemptContext, fingerprint: string) {
   return `${context.jobId}/${context.revisionId}/provider-results/${fingerprint}.json`;
 }
 
+function checkpointArtifactId(fingerprint: string) {
+  return `provider-checkpoint-${fingerprint}`;
+}
+
 function reservationRow(value: unknown): ReservationRow | undefined {
   const row = Array.isArray(value) ? value[0] : value;
   if (!row || typeof row !== "object") return undefined;
   const candidate = row as Record<string, unknown>;
+  const shouldCall = candidate.should_call ?? candidate.shouldCall;
   if (!(["reserved", "confirmed", "ambiguous", "released"] as unknown[]).includes(candidate.charge_state)
-    || typeof candidate.should_call !== "boolean") return undefined;
-  return candidate as ReservationRow;
+    || typeof shouldCall !== "boolean") return undefined;
+  return { ...candidate, should_call: shouldCall } as ReservationRow;
 }
 
-async function readCheckpoint(path: string, expectedHash?: string | null, expectedBytes?: number | null) {
+async function readCheckpoint(path: string, expectedHash?: string | null, expectedBytes?: number | null, artifactId?: string) {
+  if (cloudflareStateEnabled()) {
+    try {
+      const artifact = await readPrivateControlPlaneArtifact(artifactId ?? checkpointArtifactId(path));
+      const bytes = artifact.bytes;
+      if ((expectedBytes != null && bytes.length !== Number(expectedBytes))
+        || (expectedHash && hash(bytes) !== expectedHash)) throw new Error("provider_checkpoint_integrity_failed");
+      return bytes;
+    } catch (error) {
+      if (error instanceof Error && error.message === "provider_checkpoint_integrity_failed") throw error;
+      return undefined;
+    }
+  }
   const { data, error } = await createServerSupabaseClient().storage.from(ARTIFACT_BUCKET).download(path);
   if (error || !data) return undefined;
   const bytes = Buffer.from(await data.arrayBuffer());
@@ -68,6 +87,14 @@ async function readCheckpoint(path: string, expectedHash?: string | null, expect
 }
 
 async function settle(attempt: Extract<ProviderAttempt, { tracked: true }>, chargeState: "confirmed" | "ambiguous" | "released", checkpoint?: Buffer) {
+  if (cloudflareStateEnabled()) {
+    const result = await sendControlPlaneCommand<{ settled: boolean }>("providers", {
+      command: "settle", jobId: attempt.context.jobId, requestFingerprint: attempt.fingerprint, chargeState,
+      ...(checkpoint ? { resultStoragePath: attempt.checkpointPath, resultSha256: hash(checkpoint), resultByteSize: checkpoint.length } : {}),
+    });
+    if (!result.settled) throw new Error("provider_attempt_settlement_failed");
+    return;
+  }
   const { data, error } = await createServerSupabaseClient().rpc("settle_kyozai_provider_attempt", {
     p_job_id: attempt.context.jobId,
     p_request_fingerprint: attempt.fingerprint,
@@ -97,20 +124,23 @@ export async function beginProviderAttempt(input: ProviderAttemptInput): Promise
     logicalAttempt: input.logicalAttempt,
   }));
   const path = checkpointPath(context, fingerprint);
-  const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase.rpc("reserve_kyozai_provider_attempt", {
-    p_job_id: context.jobId,
-    p_revision_id: context.revisionId,
-    p_stage_run_id: context.stageRunId,
-    p_operation: input.operation,
-    p_provider: input.provider,
-    p_model: input.model,
-    p_request_fingerprint: fingerprint,
-    p_image_count: input.imageCount ?? 0,
-    p_cost_units: input.estimatedCostUnits ?? 1,
-  });
-  const reservation = reservationRow(data);
-  if (error || !reservation) throw new Error("provider_attempt_reservation_failed");
+  let reservation: ReservationRow | undefined;
+  if (cloudflareStateEnabled()) {
+    reservation = reservationRow(await sendControlPlaneCommand("providers", {
+      command: "reserve", usageEventId: randomUUID(), jobId: context.jobId, revisionId: context.revisionId,
+      stageRunId: context.stageRunId, operation: input.operation, provider: input.provider, model: input.model,
+      requestFingerprint: fingerprint, imageCount: input.imageCount ?? 0, costUnits: input.estimatedCostUnits ?? 1,
+      now: new Date().toISOString(),
+    }));
+  } else {
+    const { data, error } = await createServerSupabaseClient().rpc("reserve_kyozai_provider_attempt", {
+      p_job_id: context.jobId, p_revision_id: context.revisionId, p_stage_run_id: context.stageRunId,
+      p_operation: input.operation, p_provider: input.provider, p_model: input.model,
+      p_request_fingerprint: fingerprint, p_image_count: input.imageCount ?? 0, p_cost_units: input.estimatedCostUnits ?? 1,
+    });
+    if (!error) reservation = reservationRow(data);
+  }
+  if (!reservation) throw new Error("provider_attempt_reservation_failed");
   const attempt = { tracked: true, context, input, fingerprint, checkpointPath: path } as Extract<ProviderAttempt, { tracked: true }>;
   if (reservation.should_call) return attempt;
 
@@ -118,6 +148,7 @@ export async function beginProviderAttempt(input: ProviderAttemptInput): Promise
     reservation.result_storage_path ?? path,
     reservation.result_sha256,
     reservation.result_byte_size,
+    checkpointArtifactId(fingerprint),
   );
   if (recovered) {
     if (reservation.charge_state === "reserved") await settle(attempt, "confirmed", recovered);
@@ -129,6 +160,17 @@ export async function beginProviderAttempt(input: ProviderAttemptInput): Promise
 
 export async function confirmProviderAttempt(attempt: ProviderAttempt, checkpoint: Buffer) {
   if (!attempt.tracked) return;
+  if (cloudflareStateEnabled()) {
+    try {
+      await writePrivateControlPlaneArtifact({ artifactId: checkpointArtifactId(attempt.fingerprint), jobId: attempt.context.jobId, revisionId: attempt.context.revisionId, kind: "provider_checkpoint", storageBucket: ARTIFACT_BUCKET, storagePath: attempt.checkpointPath, mediaType: "application/json", bytes: checkpoint, metadata: { requestFingerprint: attempt.fingerprint }, now: new Date().toISOString() });
+    } catch {
+      const existing = await readCheckpoint(attempt.checkpointPath, hash(checkpoint), checkpoint.length, checkpointArtifactId(attempt.fingerprint));
+      if (!existing) throw new Error("provider_checkpoint_upload_failed");
+    }
+    injectG1Fault("provider_checkpoint_saved");
+    await settle(attempt, "confirmed", checkpoint);
+    return;
+  }
   const storage = createServerSupabaseClient().storage.from(ARTIFACT_BUCKET);
   const uploaded = await storage.upload(attempt.checkpointPath, checkpoint, { contentType: "application/json", upsert: false });
   if (uploaded.error) {

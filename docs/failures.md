@@ -1727,3 +1727,184 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
   緩めず、公開後24時間を経過した依存版を選定した。
 - **再発防止**：WindowsでWorker bundleが表示上完了しても、終了コードが非0なら検証不合格として扱い、
   CIの対象OSで再現性を確認する。
+
+## 2026-08-28 local D1 fixtureのJSON SQL引数がPowerShellで壊れた
+
+- **何が起きたか**：`wrangler d1 execute --command`へ渡したJSON配列を含むSQLがPowerShellの引数解釈で分割され、
+  Wranglerはunknown argumentとして停止した。
+- **影響**：直前のlocal D1 migrationは24命令すべて成功したが、system controlの更新は実行されていない。
+  remote D1/R2、Vercel、秘密値、案件データへの影響はない。
+- **修正状況**：値をSQL引数へ直接埋め込まず、JSON関数で表現できる引数へ変更してfixtureを再実行する。
+- **再発防止**：PowerShell経由のWrangler SQLでは、入れ子の引用符を含むliteralを避け、DB側のJSON関数または
+  SQL fileを使用する。
+
+## 2026-08-28 internal Bearer認証が空白を一致していなかった
+
+- **何が起きたか**：local Worker fixtureで正しいinternal tokenを送っても404になった。認証正規表現が
+  正規表現の空白クラスではなく文字列`\\s`を探しており、`Bearer <token>`を一致できなかった。
+- **影響**：internal commandはすべてfail-closedで404となり、D1の書込みは実行されなかった。remote環境、
+  利用者データ、秘密値への影響はない。
+- **修正**：空白クラスを正しく解釈する正規表現へ変更し、正しいBearer headerが400（入力形式エラー）まで
+  到達する境界テストを追加する。
+- **再発防止**：拒否だけでなく、認証済みrequestが次の入力検証段へ到達するテストを必須にする。
+
+## 2026-08-28 stage完了を拒否するD1制約があった
+
+- **何が起きたか**：local D1 fixtureでstageを`passed`へ更新したところ、初期schemaの
+  `status = 'running'`と`started_at IS NOT NULL`の同値制約が、完了後も保持すべき`started_at`を禁止して停止した。
+- **影響**：Workerは503でfail-closedとなり、stage・jobの状態は更新されなかった。remote D1/R2、Vercel、
+  provider、秘密値への影響はない。
+- **修正**：制約を「runningのstageにはstarted_atが必須」へ変更し、既存D1 tableを安全に再構築するmigrationを追加する。
+- **再発防止**：claim後のpass/fail fixtureでstarted_at、completed_at、terminal statusの組を検証する。
+
+## 2026-08-28 provider accounting追加後もWindowsのWrangler dry-runが異常終了した
+
+- **何が起きたか**：G1のprovider accounting migrationとcancellation settlement commandの追加後、
+  `pnpm -r build`を再実行した。Web buildとWorker bundle、D1/R2 binding解決、`--dry-run: exiting now.`の表示後に、
+  Windows/Node 24のWorker processだけがexit status `0xC0000409`で終了した。
+- **影響**：Cloudflareへの配備、remote D1/R2、Vercel設定、provider呼出し、秘密値の表示・共有は行われていない。
+  control-plane型検査・境界テスト、local D1 migration、local cancellation fixtureは別途合格している。
+- **修正状況**：このローカルdry-runを成功と扱わず、push後のLinux CI buildを合格証拠として確認する。
+- **再発防止**：Windowsで同じ終了コードが再発した場合も、bundle表示だけで合格にせず、実装検証とCI検証を分けて記録する。
+
+## 2026-08-28 private R2 clientでNode BufferをFetch bodyへ直接渡した
+
+- **何が起きたか**：Vercel Workflowからcontrol-planeへartifact bytesをstreamするclientの型検査で、
+  Nodeの`Buffer`がFetchの`BodyInit`として受理されず停止した。
+- **影響**：型検査段階で停止しており、R2/D1への書込み、provider呼出し、秘密値の表示・共有はない。
+- **修正**：`Uint8Array`入力をserver-sideの`Blob`へ明示変換してからFetch bodyに渡す。
+- **再発防止**：Node runtime固有のbinary型をHTTP境界へ渡す処理は、型検査とreadbackテストで検証する。
+
+## 2026-08-28 private R2 clientのBlob変換が共有buffer型を受理しなかった
+
+- **何が起きたか**：前項の修正で`Uint8Array`をそのまま`Blob`へ渡したところ、型定義上はshared bufferを
+  持ち得るviewとして拒否された。
+- **影響**：型検査段階で停止しており、R2/D1、provider、秘密値への影響はない。
+- **修正**：`Uint8Array.from`で専用のarray bufferへコピーしてから`Blob`を構成する。
+- **再発防止**：NodeとDOMのbinary型境界では、buffer所有権を型で明示して検査する。
+
+## 2026-08-28 D1 provider settlementの行型が不十分だった
+
+- **何が起きたか**：provider settlement commandの型検査で、D1の`first()`結果を直接cost値として扱い、
+  戻り値のnull／scalar表現を十分に狭めていないことが検出された。
+- **影響**：型検査段階で停止しており、D1/R2、provider、秘密値への影響はない。
+- **修正**：cost rowを明示的に検証し、値が不正ならquota更新前に競合としてfail-closedにする。
+- **再発防止**：D1のdynamic rowは外部境界と同じく、使用前に型を検証する。
+
+## 2026-08-28 D1 provider trigger後の更新件数を成功判定に使った
+
+- **何が起きたか**：local D1 fixtureでprovider settlementはusageとquotaを正しく更新したが、
+  triggerを伴う`UPDATE`のreturned change countを一律に1と仮定したため、gatewayが409を返した。
+- **影響**：fixture stateだけで起き、provider実呼出し、remote D1/R2、秘密値への影響はない。
+- **修正**：更新件数ではなく、同一usage rowのcharge state readbackでsettlement成功を確認する。
+- **再発防止**：D1 triggerを伴う更新では、driverの件数だけを結果契約にせず永続stateを再読込して確認する。
+
+## 2026-08-28 D1 provider reservationでもtrigger後の更新件数を成功判定に使った
+
+- **何が起きたか**：同じlocal D1 fixtureで、reservation insertはusage rowとinflight quotaを正しく作成したが、
+  triggerを伴うinsertのreturned change countを一律に1と仮定したため初回requestへ409を返した。
+- **影響**：fixture stateだけで起き、provider実呼出し、remote D1/R2、秘密値への影響はない。
+- **修正**：insertが例外なく完了したことを初回reservation成功とし、unique conflict時だけ既存rowを読んで再送扱いにする。
+- **再発防止**：D1 triggerのあるcommandでは、各DMLのreturned change countを成功契約へ使わない。
+
+## 2026-08-28 PowerShell経由のartifact fixture SQLがJSON引用で分割された
+
+- **何が起きたか**：local D1のartifact read fixtureを`--command`で実行した際、metadataとoutput IDのJSON literalが
+  PowerShell引数解釈で分割され、WranglerはSQLを実行せずunknown argumentで停止した。
+- **影響**：fixture DBへの書込みはなく、remote D1/R2、provider、秘密値への影響はない。
+- **修正**：JSONを含むD1 fixtureはSQL fileへ置き、`--file`で実行する。
+- **再発防止**：PowerShellからWranglerへJSONを含むSQLを渡す場合はinline commandを使わない。
+
+## 2026-08-28 Workflow helperがファイル行数上限を超えた
+
+- **何が起きたか**：private R2 artifact処理を`job-workflow.ts`へ追加した結果、CIのlintでファイルが314行となり、
+  `max-lines`の300行制約により失敗した。
+- **影響**：型検査までは合格しており、CIはlint時点で停止した。remote D1/R2、Vercel、provider、秘密値への影響はない。
+- **修正**：artifactの永続化・readback・既存画像復元を単独の`job-workflow-artifacts.ts`へ分離した。
+- **再発防止**：workflow組立ファイルへstorage実装を積み増さず、単独で変更・検証される責務ごとに分ける。
+
+## 2026-08-28 WindowsのWorker dry-runが再度異常終了した
+
+- **何が起きたか**：workflow state command追加後の`pnpm -r build`でも、Worker bundleとbinding解決、
+  `--dry-run: exiting now.`の後にWindows/Node 24のWrangler processが`0xC0000409`で終了した。
+- **影響**：Cloudflareへの配備、remote D1/R2、Vercel、provider、秘密値への影響はない。web buildはこの時点まで開始済みだったが、
+  recursive buildはcontrol-planeの異常終了により失敗扱いとなった。
+- **修正状況**：既知のローカル環境問題として成功扱いにせず、Linux CIのbuild証拠で判定する。実装側のtypecheck、lint、unit test、local D1 fixtureは別途実行する。
+- **再発防止**：この環境でWorker buildを実行した場合は、exit codeとCIのLinux結果を必ず分けて記録する。
+
+## 2026-08-29 Cloudflare Cron cleanupのHTTP methodがVercel routeと一致していなかった
+
+- **何が起きたか**：control-plane schedulerはdispatchとcleanupをPOSTで呼ぶが、cleanup routeはGETだけを公開していた。
+- **影響**：Cloudflare Cronからcleanupを起動すると405となり得た。Preview/ProductionのCron、D1/R2、利用者データ、秘密値への実影響はない。
+- **修正**：cleanup処理を共通化し、Vercel Cron用GETとCloudflare scheduler用POSTの両方を同じ認証境界で受けるようにした。
+- **再発防止**：scheduler targetごとにmethodを契約テストで確認し、Cron呼出し側とroute側を同時に変更する。
+
+## 2026-08-29 WindowsのG1 direct-text fixtureがOS既定一時領域へ書き込めなかった
+
+- **何が起きたか**：`mktemp`がWindowsの`C:\\tmp`を選び、Wranglerのlocal D1 migrationがpermission errorで停止した。
+- **影響**：migration開始前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：fixtureの一時状態をリポジトリ配下の`outputs/tmp`に明示的に作成し、終了時に削除する。
+- **再発防止**：Windowsで実行するlocal Worker fixtureはOS既定の一時領域に依存せず、プロジェクト管理下の隔離ディレクトリを指定する。
+
+## 2026-08-29 WSLからWindows版WranglerへPOSIXのpersist pathを渡した
+
+- **何が起きたか**：前項の修正後も、WSL上の`/mnt/c/...`をWindows版Wranglerへそのまま渡したため、`C:\\mnt\\...`として解釈されpermission errorで停止した。
+- **影響**：local D1 migrationの開始前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSL環境では`wslpath -w`でpersist pathだけをWindows形式に変換してWranglerへ渡す。
+- **再発防止**：WSLからWindows実行ファイルを呼ぶfixtureでは、ファイル引数の形式を呼出し境界ごとに明示する。
+
+## 2026-08-29 fresh D1 migrationでprovider accounting columnが重複した
+
+- **何が起きたか**：`0001_g1_schema.sql`へ後続migration `0004_provider_accounting.sql`の追加columnを先取りして書いていたため、fresh databaseで`0004`がduplicate column errorとなった。
+- **影響**：isolated local fixtureのmigration中に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：先取りしたcolumnを`0001`から外し、既存環境とfresh環境の両方で`0004`が唯一のschema追加元となるようにした。
+- **再発防止**：適用済みmigrationのschemaを後続migrationと重ねて編集せず、fresh migration fixtureをschema変更ごとに実行する。
+
+## 2026-08-29 WSLのfixture health checkがWindows Workerへ到達しなかった
+
+- **何が起きたか**：Windows版Wranglerが起動した`127.0.0.1`へWSL版`curl`で接続したため、Workerはreadyでもhealth checkが失敗した。またcleanupもWindows子processを停止できなかった。
+- **影響**：isolated local fixtureが停止し、一時stateが残った。remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSL上ではWindows版`curl.exe`でHTTP確認を行い、port listenerをWindows側で停止してstateを削除する。
+- **再発防止**：local Workerの実行環境とHTTP clientのnetwork namespaceを一致させ、fixture cleanupはWorker processの所有OSで実行する。
+
+## 2026-08-29 WSLのfixture JSON assertionにLinux側Nodeを仮定した
+
+- **何が起きたか**：WorkerとHTTP clientをWindows側へ合わせた後も、fixtureのJSON assertionはWSLの`node`を呼んでおり、Node未導入のWSLでは初回command後に停止した。
+- **影響**：isolated local fixtureの途中で停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSLではWindows版`node.exe`を使い、HTTP responseのpathもWindows形式で渡す。
+- **再発防止**：cross-OS fixtureではWorker、HTTP client、assertion runtimeを同じOS側へ明示的に揃える。
+
+## 2026-08-29 local Worker起動中に同じD1 stateへfixture SQLを投入した
+
+- **何が起きたか**：Windows版Workerがlocal D1 stateを使用中に別のWrangler processからfixture用stage/artifact rowを書き込もうとして、SQLiteのlock待ちになった。
+- **影響**：isolated local fixtureがsnapshot検証前に停止し、remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：fixture用rowの投入前にWorkerを停止し、D1書込み後に同じstateで再起動する。
+- **再発防止**：local D1 fixtureではWorkerを通す検証と直接D1投入を同時に行わず、state所有者を段階ごとに一つにする。
+
+## 2026-08-29 Windows Wrangler子processの終了待ちがfixtureを不安定化した
+
+- **何が起きたか**：WSLから起動したWindows版Wranglerが親shellの終了後もchild processを残し、次回fixtureのport確認とlocal D1再利用を不安定にした。
+- **影響**：isolated local fixtureの完走証拠は未取得。remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正状況**：fixtureにlistener停止と停止完了待ちを追加した。Windows固有のchild-tree終了はLinux CIでも検証してから合格証拠にする。
+- **再発防止**：OSをまたぐRunnerの終了コードだけでfixtureを合格扱いにせず、port解放とclean state作成を明示確認する。
+
+## 2026-08-29 WSL fixture cleanupがWindows Workerの所有者を特定できなかった
+
+- **何が起きたか**：WSL shellでbackground起動したWindows版Wranglerは、POSIX側のbackground PIDとは別のWindows process treeとして残った。従来のcleanupはそのPIDを`kill`した後、command lineとport番号だけで残存processを探索していたため、fixture自身が開始していないlistenerまで停止対象になり得た。
+- **影響**：isolated local fixtureのport解放とstate削除が不安定だった。remote D1/R2、provider、利用者データ、秘密値への影響はない。
+- **修正**：WSLではPowerShell `Start-Process`でWindows側の親PIDを取得し、そのPIDだけを`taskkill /T`で終了する。終了後はport解放を待機し、未解放なら任意のlistenerをkillせずfixtureを失敗させる。
+- **再発防止**：cross-OS processを起動するfixtureは、開始時に所有者PIDを取得し、cleanupで名前・portだけの探索を使わない。
+
+## 2026-08-29 Windows Wrangler dry-runがビルドを異常終了させた
+
+- **何が起きたか**：`pnpm -r build`で`apps/control-plane`の`wrangler deploy --dry-run`がbinding解決とbundle出力後にWindows終了コード`3221226505`で異常終了した。
+- **影響**：ローカルのcontrol-plane build証拠を取得できなかった。生成経路、remote D1/R2、provider、秘密値への影響はない。
+- **修正状況**：既知のWindows Wrangler実行環境差として記録し、Linux CIまたはCloudflare実行環境のdry-runを合格証拠に使う。ローカルの型検査・lint・web testは別途合格している。
+- **再発防止**：Windowsローカルの終了コードだけでWorker buildを合格扱いにせず、CIの実行結果とbinding解決ログを併用する。
+
+## 2026-08-29 個人PWA方針のGoalスキーマ反映漏れ
+
+- **何が起きたか**：`shared/kyozai-parity-goal.json`へ個人PWA方針の`deliveryMode`／`saasFrozen`を追加した際、厳格なGoal JSON Schemaへ同じプロパティを追加し忘れ、CIの`validate:goal`が拒否した。
+- **影響**：アプリの型検査・テスト・E2Eには影響せず、CIの契約検証ジョブと`ci-green`だけが失敗した。
+- **修正**：Goal Schemaへ両プロパティの型と許容値を追加し、`pnpm validate:goal`、skill検証、Webテスト178件、型検査、lintを再実行して合格させた。
+- **再発防止**：Goal JSONの方針フィールドを変更する際は、JSON本体と厳格Schemaを同一コミットで更新し、CI契約検証を先に実行する。

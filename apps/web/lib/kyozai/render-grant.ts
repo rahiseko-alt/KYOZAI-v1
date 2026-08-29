@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { e2eEphemeralSecret } from "./e2e-runtime";
+import { personalPwaEnabled } from "./generation-access";
 import type { ImageModelId } from "./image-models";
 import { PublicHttpError, badRequest } from "./http-errors";
 import type { TeachingPackage } from "./types";
@@ -60,6 +61,20 @@ function signatureMatches(encodedPayload: string, providedSignature: string) {
   });
 }
 
+function readPayload(encodedPayload: string) {
+  try {
+    return JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as RenderGrantPayload;
+  } catch {
+    throw badRequest("画像生成の許可内容が不正です。");
+  }
+}
+
+function assertPayloadMatches(payload: RenderGrantPayload, result: TeachingPackage, imageModel: ImageModelId) {
+  if (payload.version !== 2 || payload.expiresAt < Date.now() || payload.imageModel !== imageModel || payload.slideCount !== result.slides.length || payload.packageHash !== packageHash(result)) {
+    throw badRequest("画像生成の許可が教材または選択モデルと一致しません。");
+  }
+}
+
 export function issueRenderGrant(result: TeachingPackage, imageModel: ImageModelId) {
   const payload: RenderGrantPayload = {
     version: 2,
@@ -69,21 +84,24 @@ export function issueRenderGrant(result: TeachingPackage, imageModel: ImageModel
     expiresAt: Date.now() + 15 * 60_000,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  // The user explicitly chose a single-user PWA. This mode deliberately
+  // carries an unsigned, short-lived package binding instead of requiring a
+  // separately managed signing secret. SaaS and Preview stay signed.
+  if (personalPwaEnabled()) return `pwa.${encodedPayload}`;
   return `${encodedPayload}.${signature(encodedPayload)}`;
 }
 
 export function verifyRenderGrant(grant: unknown, result: TeachingPackage, imageModel: ImageModelId) {
   if (typeof grant !== "string" || grant.length > 2048) throw badRequest("画像生成の許可を確認できませんでした。教材をもう一度生成してください。");
-  const [encodedPayload, providedSignature, extra] = grant.split(".");
+  const parts = grant.split(".");
+  if (personalPwaEnabled()) {
+    const [kind, encodedPayload, extra] = parts;
+    if (kind !== "pwa" || !encodedPayload || extra) throw badRequest("画像生成の許可形式が不正です。");
+    assertPayloadMatches(readPayload(encodedPayload), result, imageModel);
+    return;
+  }
+  const [encodedPayload, providedSignature, extra] = parts;
   if (!encodedPayload || !providedSignature || extra) throw badRequest("画像生成の許可形式が不正です。");
   if (!signatureMatches(encodedPayload, providedSignature)) throw badRequest("画像生成の許可を検証できませんでした。");
-  let payload: RenderGrantPayload;
-  try {
-    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as RenderGrantPayload;
-  } catch {
-    throw badRequest("画像生成の許可内容が不正です。");
-  }
-  if (payload.version !== 2 || payload.expiresAt < Date.now() || payload.imageModel !== imageModel || payload.slideCount !== result.slides.length || payload.packageHash !== packageHash(result)) {
-    throw badRequest("画像生成の許可が教材または選択モデルと一致しません。");
-  }
+  assertPayloadMatches(readPayload(encodedPayload), result, imageModel);
 }

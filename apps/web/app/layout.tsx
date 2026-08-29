@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
+import { PwaRegistration } from "./pwa-registration";
 
 // CSP の nonce（proxy.ts が組み立てる）は動的にレンダリングされたページにしか
 // 届かない。ここで静的化を止めておかないと、動くページが増えるまで気付かないまま
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "KYOZAI | 資料を、教えられる教材へ。",
   description: "資料から研修スライド、講師シナリオ、FAQ、確認テストをAIでまとめて作成します。",
+  applicationName: "KYOZAI",
+  appleWebApp: { capable: true, title: "KYOZAI", statusBarStyle: "default" },
 };
 
 export default function RootLayout({
@@ -18,7 +21,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body><PwaRegistration />{children}</body>
     </html>
   );
 }

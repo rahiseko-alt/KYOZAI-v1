@@ -41,7 +41,7 @@ function attachmentName(row: UploadRow) {
 export async function loadDurableSources(
   jobId: string,
   request: DurableRequest,
-  supabase: Pick<SupabaseClient, "from" | "storage">,
+  supabase: Pick<SupabaseClient, "from" | "storage"> | undefined,
   deadlineMs = Date.now() + 120_000,
 ): Promise<SourceInput[]> {
   const sources: SourceInput[] = [];
@@ -57,6 +57,7 @@ export async function loadDurableSources(
 
   const ids = attachmentIds(request.attachmentIds ?? []);
   if (ids.length) {
+    if (!supabase) throw new Error("durable_attachment_cloudflare_state_not_ready");
     const { data, error } = await supabase.from("upload_sessions")
       .select("id, storage_path, media_type, consumed_by_job_id")
       .in("id", ids);

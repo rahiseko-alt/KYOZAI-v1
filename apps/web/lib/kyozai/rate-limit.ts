@@ -1,6 +1,7 @@
 import { createHmac, createHash } from "node:crypto";
 
 import { e2eEphemeralSecret, isE2eRuntimeAllowed } from "./e2e-runtime";
+import { personalPwaEnabled } from "./generation-access";
 import { PublicHttpError } from "./http-errors";
 
 export type RateLimitPolicy = "generate" | "revise" | "render-slide";
@@ -45,7 +46,7 @@ function isVercel() {
 }
 
 function localMode() {
-  return !isVercel() || isE2eRuntimeAllowed();
+  return !isVercel() || isE2eRuntimeAllowed() || personalPwaEnabled();
 }
 
 function idSecret() {
@@ -65,8 +66,12 @@ function limited(retryAfterMs: number) {
   return new RateLimitError("利用上限に達しました。時間を置いてお試しください。", 429, "RATE_LIMITED", seconds);
 }
 
-function digest(value: string, secret = idSecret()) {
-  return createHmac("sha256", secret).update(value).digest("hex");
+function digest(value: string, secret?: string) {
+  // Personal PWA mode intentionally avoids a paid/shared Redis dependency.
+  // The bucket is process-local, so a public HMAC key is neither needed nor
+  // persisted. SaaS/Preview paths continue to require the dedicated secret.
+  if (personalPwaEnabled()) return createHash("sha256").update(value).digest("hex");
+  return createHmac("sha256", secret ?? idSecret()).update(value).digest("hex");
 }
 
 function actorAddress(request: Request) {

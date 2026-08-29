@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "kyozai-preview",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "443101c6-4028-406f-82fa-9c392309877e",
       "migrations_dir": "migrations"
     }
   ],
