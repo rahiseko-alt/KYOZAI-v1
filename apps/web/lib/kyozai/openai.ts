@@ -114,7 +114,7 @@ export async function requestStructured(
             body: JSON.stringify({
               model,
               store: false,
-              stream: true,
+              stream: providerAttempt.tracked,
               max_output_tokens: attempt === 0 ? maxOutputTokens : Math.min(Math.ceil(maxOutputTokens * 1.6), 20_000),
               reasoning: { effort: "medium" },
               instructions,
