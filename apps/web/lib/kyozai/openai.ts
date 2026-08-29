@@ -66,12 +66,24 @@ function outputText(response: ApiResponse): string {
 
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-function preResponseConnectionCode(error: unknown) {
-  if (!(error instanceof TypeError) || error.message !== "fetch failed") return undefined;
-  const cause = error.cause;
-  if (!cause || typeof cause !== "object" || !("code" in cause)) return undefined;
-  const code = (cause as { code?: unknown }).code;
+class OpenAiPreResponseConnectionError extends Error {
+  constructor(readonly cause: unknown) {
+    super("openai_pre_response_connection_failed");
+    this.name = "OpenAiPreResponseConnectionError";
+  }
+}
+
+function safeConnectionCode(value: unknown) {
+  if (!value || typeof value !== "object" || !("code" in value)) return undefined;
+  const code = (value as { code?: unknown }).code;
   return typeof code === "string" && /^[A-Z_]{1,64}$/.test(code) ? code : undefined;
+}
+
+function preResponseConnectionDetails(error: unknown) {
+  if (!(error instanceof OpenAiPreResponseConnectionError)) return undefined;
+  const cause = error.cause;
+  const name = cause instanceof Error && /^[A-Za-z0-9_]{1,64}$/.test(cause.name) ? cause.name : "unknown";
+  return { name, code: safeConnectionCode(cause) ?? (cause instanceof Error ? safeConnectionCode(cause.cause) : undefined) };
 }
 
 export async function requestStructured(
@@ -110,27 +122,32 @@ export async function requestStructured(
         checkpoint = readStructuredCheckpoint(providerAttempt.recovered);
       } else {
         const requestDeadline = Date.now() + timeoutMs;
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            store: false,
-            stream: true,
-            max_output_tokens: attempt === 0 ? maxOutputTokens : Math.min(Math.ceil(maxOutputTokens * 1.6), 20_000),
-            reasoning: { effort: "medium" },
-            instructions,
-            input,
-            text: {
-              format: { type: "json_schema", name, strict: true, schema },
-              verbosity: "low",
+        let response: Response;
+        try {
+          response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
             },
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        });
+            body: JSON.stringify({
+              model,
+              store: false,
+              stream: true,
+              max_output_tokens: attempt === 0 ? maxOutputTokens : Math.min(Math.ceil(maxOutputTokens * 1.6), 20_000),
+              reasoning: { effort: "medium" },
+              instructions,
+              input,
+              text: {
+                format: { type: "json_schema", name, strict: true, schema },
+                verbosity: "low",
+              },
+            }),
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+        } catch (error) {
+          throw new OpenAiPreResponseConnectionError(error);
+        }
 
         if (!response.ok) {
           await releaseProviderAttempt(providerAttempt);
@@ -207,18 +224,28 @@ export async function requestStructured(
         throw new PublicHttpError(504, "TIMEOUT", "AIの結果を確認できませんでした。二重生成を避けるため自動再送はしていません。");
       }
       if (error instanceof Error && (error.message.startsWith("provider_checkpoint_") || error.message === "provider_attempt_settlement_failed")) throw error;
-      const connectionCode = preResponseConnectionCode(error);
-      if (!providerAttempt.tracked && connectionCode !== undefined && attempt + 1 < maxAttempts) {
+      const connection = preResponseConnectionDetails(error);
+      if (!providerAttempt.tracked && connection?.name === "TypeError" && connection.code !== undefined && attempt + 1 < maxAttempts) {
         console.warn("OpenAI connection failed before response; retrying personal PWA request", {
           name,
           attempt,
-          connectionCode,
+          connectionCode: connection.code,
           elapsedMs: Date.now() - startedAt,
         });
         await wait(500);
         continue;
       }
       await markProviderAttemptAmbiguous(providerAttempt);
+      if (connection) {
+        console.error(JSON.stringify({
+          event: "openai_pre_response_connection_failed",
+          name,
+          attempt,
+          connectionName: connection.name,
+          ...(connection.code ? { connectionCode: connection.code } : {}),
+          elapsedMs: Date.now() - startedAt,
+        }));
+      }
       console.warn("OpenAI request could not complete", {
         name,
         attempt,
