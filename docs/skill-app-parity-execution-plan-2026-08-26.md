@@ -19,6 +19,8 @@ blind evidence、provider usage突合、物理削除記録で判定する。SaaS
 
 個人PWAでは、ブラウザーへ秘密値を渡さず、端末内または利用者が管理する単一環境で生成する。Cloudflare Accessによる多人数所有者分離、R2 subscription、共有quota、SaaS向けCron/SLOは完成条件から外し、SaaS再開時の再審議事項として記録する。Production 404ロックは解除し、個人PWAとして安全に利用できる単一利用者向け入口を整備する作業へ切り替える。ただし、APIキー未設定・上限不明・生成結果保存先なしの場合はfail-closedを維持する。
 
+個人PWAのProductionレート制限は、追加料金の発生する共有Redisを前提にせず、プロセス内の短期バケットで制限する。SaaS／Previewの分散レート制限と秘密鍵要件は維持する。署名鍵などの秘密設定が無い場合は、個人PWAでも生成をfail-closedにする。
+
 ## AS-IS／TO-BE
 
 | AS-ISの不足 | TO-BE | Gate |

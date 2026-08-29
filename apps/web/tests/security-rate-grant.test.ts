@@ -123,6 +123,18 @@ describe("分散レート制限", () => {
     });
   });
 
+  it("個人PWAのProductionは共有Redisなしでプロセス内制限を使う", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("KYOZAI_PERSONAL_PWA_ENABLED", "1");
+    vi.stubEnv("PROCESS_PARITY_PIPELINE_ENABLED", "1");
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>());
+    const request = new Request("https://example.test/api/generate", {
+      headers: { "x-forwarded-for": "198.51.100.77" },
+    });
+    await expect(enforceRateLimit(request, "generate")).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("render-slideはgrantとslideの再試行枠も同じ原子操作に含める", async () => {
     productionEnv();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ result: [1, 1, 1, 900_000, 86_400_000, 900_000] }), { status: 200 }));
