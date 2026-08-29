@@ -262,7 +262,20 @@ describe("AI構造化応答", () => {
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
-  it("OpenAI接続のTimeoutError後に二重生成を避けて自動再送しない", async () => {
+  it("返答前のOpenAI接続失敗は個人PWAで1回だけ再接続する", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError("fetch failed", { cause: { code: "ECONNRESET" } }))
+      .mockResolvedValueOnce(completed(analysis));
+    remainingStages().forEach((response) => fetchMock.mockResolvedValueOnce(response));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generatePackage([{ type: "input_text", text: "研修資料" }], "初心者向け教材を作る", Date.now() + 120_000))
+      .resolves.toMatchObject({ title: mockPackage.title, process: { analysis } });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("応答が確認できないTimeoutErrorは再接続しない", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const fetchMock = vi.fn<typeof fetch>()
       .mockRejectedValueOnce(new DOMException("request timed out", "TimeoutError"));
