@@ -112,12 +112,14 @@ expect_status() {
 
 expect_json() {
   local label="$1" path="$2" expected="$3"
-  "${NODE_BIN}" - "${HTTP_RESPONSE}" "${path}" "${expected}" <<'NODE'
+  if ! "${NODE_BIN}" - "${HTTP_RESPONSE}" "${path}" "${expected}" <<'NODE'
 const [file, path, expected] = process.argv.slice(2);
 const value = path.split(".").reduce((item, part) => item?.[part], JSON.parse(require("node:fs").readFileSync(file, "utf8")));
 if (JSON.stringify(value) !== JSON.stringify(JSON.parse(expected))) process.exitCode = 1;
 NODE
-  [ "$?" -eq 0 ] || fail "${label}: ${path} did not equal ${expected}; response=$(tr -d '\n' < "${RESPONSE}")"
+  then
+    fail "${label}: ${path} did not equal ${expected}; response=$(tr -d '\n' < "${RESPONSE}")"
+  fi
   echo "  OK   ${label}"
 }
 
@@ -153,7 +155,7 @@ status="$(post_job_command '{"command":"read","ownerId":"fixture-owner-b","jobId
 stop_worker
 bash "${PNPM_RUNNER}" --filter @kyozai/control-plane exec wrangler d1 execute kyozai-preview --local --persist-to "${WRANGLER_STATE_DIR}" --command "INSERT INTO stage_runs (id, job_id, revision_id, stage, slide_number, attempt, status, input_artifact_ids_json, output_artifact_ids_json, validator, usage_json, created_at, completed_at) VALUES ('fixture-stage-a', 'fixture-job-a', 'fixture-revision-a', 'analysis', 0, 0, 'passed', '[\"fixture-source-a\"]', '[\"fixture-artifact-a\"]', 'fixture', '{\"inputTokens\":12}', '2026-08-28T00:00:00.000Z', '2026-08-28T00:00:01.000Z'); INSERT INTO artifacts (id, job_id, revision_id, kind, lifecycle, storage_bucket, storage_path, sha256, media_type, byte_size, created_at, finalized_at) VALUES ('fixture-artifact-a', 'fixture-job-a', 'fixture-revision-a', 'analysis', 'final', 'kyozai-artifacts', 'fixture/job-a/analysis.json', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'application/json', 12, '2026-08-28T00:00:00.000Z', '2026-08-28T00:00:01.000Z');" || fail "fixture stage/artifact insertion failed"
 start_worker
-status="$(post_job_command '{"command":"read","ownerId":"fixture-owner-a","jobId":"fixture-job-a"}')"; expect_status "owner A snapshot read" 200 "${status}"; expect_json "D1 input artifact JSON is preserved" stages.0.input_artifact_ids_json '["fixture-source-a"]'; expect_json "D1 output artifact JSON is preserved" stages.0.output_artifact_ids_json '["fixture-artifact-a"]'; expect_json "D1 usage JSON is preserved" stages.0.usage_json '{"inputTokens":12}'
+status="$(post_job_command '{"command":"read","ownerId":"fixture-owner-a","jobId":"fixture-job-a"}')"; expect_status "owner A snapshot read" 200 "${status}"; expect_json "D1 input artifact JSON is preserved" stages.0.input_artifact_ids_json '"[\"fixture-source-a\"]"'; expect_json "D1 output artifact JSON is preserved" stages.0.output_artifact_ids_json '"[\"fixture-artifact-a\"]"'; expect_json "D1 usage JSON is preserved" stages.0.usage_json '"{\"inputTokens\":12}"'
 
 status="$(post_job_command '{"command":"cancel","ownerId":"fixture-owner-a","jobId":"fixture-job-a","now":"2026-08-28T00:01:00.000Z"}')"; expect_status "queued cancellation" 200 "${status}"; expect_json "queued cancellation is terminal" status '"cancelled"'
 status="$(post_job_command '{"command":"delete","ownerId":"fixture-owner-a","jobId":"fixture-job-a","now":"2026-08-28T00:02:00.000Z"}')"; expect_status "cancelled deletion" 200 "${status}"; expect_json "logical deletion starts" status '"deleting"'
