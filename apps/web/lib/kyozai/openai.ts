@@ -2,6 +2,7 @@ import { isTeachingPackage, teachingPackageSchema } from "./schema";
 import { designInstructions } from "./design";
 import { PublicHttpError } from "./http-errors";
 import { OpenAiStreamError, streamingOutput, type OpenAiResponsePayload } from "./openai-stream";
+import { OpenAiPreResponseConnectionError, preResponseConnectionDetails } from "./openai-failure";
 import { injectG1Fault } from "./g1-fault-injection";
 import {
   beginProviderAttempt,
@@ -65,26 +66,6 @@ function outputText(response: ApiResponse): string {
 }
 
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-class OpenAiPreResponseConnectionError extends Error {
-  constructor(readonly cause: unknown) {
-    super("openai_pre_response_connection_failed");
-    this.name = "OpenAiPreResponseConnectionError";
-  }
-}
-
-function safeConnectionCode(value: unknown) {
-  if (!value || typeof value !== "object" || !("code" in value)) return undefined;
-  const code = (value as { code?: unknown }).code;
-  return typeof code === "string" && /^[A-Z_]{1,64}$/.test(code) ? code : undefined;
-}
-
-function preResponseConnectionDetails(error: unknown) {
-  if (!(error instanceof OpenAiPreResponseConnectionError)) return undefined;
-  const cause = error.cause;
-  const name = cause instanceof Error && /^[A-Za-z0-9_]{1,64}$/.test(cause.name) ? cause.name : "unknown";
-  return { name, code: safeConnectionCode(cause) ?? (cause instanceof Error ? safeConnectionCode(cause.cause) : undefined) };
-}
 
 export async function requestStructured(
   input: unknown,
@@ -229,6 +210,14 @@ export async function requestStructured(
         break;
       }
       if (error instanceof Error && error.message.startsWith("provider_result_unavailable:")) {
+        const resultState = error.message.slice("provider_result_unavailable:".length);
+        console.error(JSON.stringify({
+          event: "openai_provider_result_unavailable",
+          name,
+          attempt,
+          resultState: /^[a-z_]{1,64}$/.test(resultState) ? resultState : "unknown",
+          elapsedMs: Date.now() - startedAt,
+        }));
         throw new PublicHttpError(504, "TIMEOUT", "AIの結果を確認できませんでした。二重生成を避けるため自動再送はしていません。");
       }
       if (error instanceof Error && (error.message.startsWith("provider_checkpoint_") || error.message === "provider_attempt_settlement_failed")) throw error;
@@ -253,6 +242,9 @@ export async function requestStructured(
           ...(connection.code ? { connectionCode: connection.code } : {}),
           elapsedMs: Date.now() - startedAt,
         }));
+      } else {
+        const errorType = error instanceof Error && /^[A-Za-z0-9_]{1,64}$/.test(error.name) ? error.name : "unknown";
+        console.error(JSON.stringify({ event: "openai_request_failure", name, attempt, errorType, elapsedMs: Date.now() - startedAt }));
       }
       console.warn("OpenAI request could not complete", {
         name,
