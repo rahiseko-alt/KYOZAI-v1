@@ -1894,3 +1894,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：isolated local fixtureのport解放とstate削除が不安定だった。remote D1/R2、provider、利用者データ、秘密値への影響はない。
 - **修正**：WSLではPowerShell `Start-Process`でWindows側の親PIDを取得し、そのPIDだけを`taskkill /T`で終了する。終了後はport解放を待機し、未解放なら任意のlistenerをkillせずfixtureを失敗させる。
 - **再発防止**：cross-OS processを起動するfixtureは、開始時に所有者PIDを取得し、cleanupで名前・portだけの探索を使わない。
+
+## 2026-08-29 Windows Wrangler dry-runがビルドを異常終了させた
+
+- **何が起きたか**：`pnpm -r build`で`apps/control-plane`の`wrangler deploy --dry-run`がbinding解決とbundle出力後にWindows終了コード`3221226505`で異常終了した。
+- **影響**：ローカルのcontrol-plane build証拠を取得できなかった。生成経路、remote D1/R2、provider、秘密値への影響はない。
+- **修正状況**：既知のWindows Wrangler実行環境差として記録し、Linux CIまたはCloudflare実行環境のdry-runを合格証拠に使う。ローカルの型検査・lint・web testは別途合格している。
+- **再発防止**：Windowsローカルの終了コードだけでWorker buildを合格扱いにせず、CIの実行結果とbinding解決ログを併用する。
