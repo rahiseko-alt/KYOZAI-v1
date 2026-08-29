@@ -1,6 +1,7 @@
 import { isTeachingPackage, teachingPackageSchema } from "./schema";
 import { designInstructions } from "./design";
 import { PublicHttpError } from "./http-errors";
+import { streamingOutput, type OpenAiResponsePayload } from "./openai-stream";
 import { injectG1Fault } from "./g1-fault-injection";
 import {
   beginProviderAttempt,
@@ -14,21 +15,7 @@ import type { TeachingPackage } from "./types";
 const API_URL = "https://api.openai.com/v1/responses";
 export const API_ROUTE_BUDGET_MS = 225_000;
 
-type ApiResponse = {
-  id?: string;
-  status?: string;
-  incomplete_details?: { reason?: string };
-  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
-  error?: { message?: string };
-};
-
-type StreamEvent = {
-  type?: string;
-  delta?: string;
-  text?: string;
-  response?: ApiResponse;
-  error?: { message?: string };
-};
+type ApiResponse = OpenAiResponsePayload;
 
 type RevisionReview = {
   passed: boolean;
@@ -77,50 +64,6 @@ function outputText(response: ApiResponse): string {
     .join("");
 }
 
-async function streamingOutput(response: Response): Promise<{ payload: ApiResponse; raw: string }> {
-  if (!response.body) throw new Error("OpenAI stream did not include a body");
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let raw = "";
-  let finalText = "";
-  let payload: ApiResponse = { status: "in_progress" };
-
-  const consumeEvent = (block: string) => {
-    const data = block
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n");
-    if (!data || data === "[DONE]") return;
-
-    const event = JSON.parse(data) as StreamEvent;
-    if (event.type === "response.output_text.delta") raw += event.delta ?? "";
-    if (event.type === "response.output_text.done") finalText = event.text ?? raw;
-    if (event.type === "response.completed" || event.type === "response.incomplete" || event.type === "response.failed") {
-      payload = event.response ?? payload;
-    }
-    if (event.type === "error") throw new Error("OpenAI streaming error");
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    buffer = buffer.replaceAll("\r\n", "\n");
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary >= 0) {
-      consumeEvent(buffer.slice(0, boundary));
-      buffer = buffer.slice(boundary + 2);
-      boundary = buffer.indexOf("\n\n");
-    }
-    if (done) break;
-  }
-  if (buffer.trim()) consumeEvent(buffer);
-
-  return { payload, raw: finalText || raw };
-}
-
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 export async function requestStructured(
@@ -158,6 +101,7 @@ export async function requestStructured(
       if (providerAttempt.tracked && providerAttempt.recovered) {
         checkpoint = readStructuredCheckpoint(providerAttempt.recovered);
       } else {
+        const requestDeadline = Date.now() + timeoutMs;
         const response = await fetch(API_URL, {
           method: "POST",
           headers: {
@@ -195,7 +139,7 @@ export async function requestStructured(
         let raw = "";
         try {
           if (response.headers.get("content-type")?.includes("text/event-stream")) {
-            ({ payload, raw } = await streamingOutput(response));
+            ({ payload, raw } = await streamingOutput(response, Math.max(1, requestDeadline - Date.now())));
           } else {
             payload = (await response.json()) as ApiResponse;
             raw = outputText(payload);

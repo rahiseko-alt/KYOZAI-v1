@@ -39,6 +39,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。SaaS
 - 実証結果: commit `76a24ef6ed3b980fa1bfacdd6673ae89678b7a89`をProductionへ配備後、OpenAI `gpt-image-2-medium`の最小fixtureを実Provider・画像QA経由で1枚生成し、HTTP 200、PNG magic、1672×941、SHA-256一致、QA passed、attempt 1を確認した。Gemini canaryはGoogle側429を`SERVICE_UNAVAILABLE`／`image_provider_response`として安全に返した。これは契約不整合ではなくProvider利用可能性の証拠として保持する。
 - 個人PWAの初期選択: 上記実証済みの`gpt-image-2-medium`を初期選択にする。Geminiは明示選択の比較候補として維持し、Provider 429をOpenAIへの無断切替で隠さない。
 - 本文生成504の観測と最小対応（G1-PWA-CONTENT-OBS-001）: 親GateはG1の個人PWA公開例外。Productionの`POST /api/generate`が504となり、画像生成前の本文生成が未完了であることを確認した。根本のProvider停止工程は未特定のため、挙動・品質工程・timeout値を変えず、本文生成の開始工程（analysis／slide_map／script_timing／content_freeze／design）、経過時間、相関request IDだけを安全に記録・返却する。受入条件は、timeout時に本文・プロンプト・APIキー・上流本文を含まず工程・相関IDを返し、各Provider境界の開始工程をunitで検証すること。
+- 本文stream timeoutの修正（G1-PWA-CONTENT-STREAM-002）: 親Gateは同じG1個人PWA公開例外。Production観測で`analysis`開始後にアプリのcatchへ戻らず504になった。調査により、OpenAIのSSE本文を読む`reader.read()`に明示的な時間制限が無いことを確認した。画像・品質工程・モデル・自動再送は変更せず、既存のProvider試行deadlineの残り時間でSSE本文を中断しreaderを閉じる。受入条件は、停止streamがdeadline内に制御されたtimeoutとなり、二重生成を避ける既存の自動再送禁止を維持すること。テストは停止stream fixture、既存のtimeout／route／E2Eを使用する。
 
 ## AS-IS／TO-BE
 
