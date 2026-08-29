@@ -169,7 +169,7 @@ describe("AI構造化応答", () => {
       stream: boolean;
       text: { verbosity: string; format: { type: string; strict: boolean } };
     };
-    expect(firstBody).toMatchObject({ model: "gpt-5.5", stream: true, text: { verbosity: "low", format: { type: "json_schema", strict: true } } });
+    expect(firstBody).toMatchObject({ model: "gpt-5.5", stream: false, text: { verbosity: "low", format: { type: "json_schema", strict: true } } });
     const retryBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { max_output_tokens: number };
     expect(retryBody.max_output_tokens).toBe(3840);
   });
