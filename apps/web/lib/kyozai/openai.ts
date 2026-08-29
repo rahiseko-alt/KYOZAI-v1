@@ -66,6 +66,14 @@ function outputText(response: ApiResponse): string {
 
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+function preResponseConnectionCode(error: unknown) {
+  if (!(error instanceof TypeError) || error.message !== "fetch failed") return undefined;
+  const cause = error.cause;
+  if (!cause || typeof cause !== "object" || !("code" in cause)) return undefined;
+  const code = (cause as { code?: unknown }).code;
+  return typeof code === "string" && /^[A-Z_]{1,64}$/.test(code) ? code : undefined;
+}
+
 export async function requestStructured(
   input: unknown,
   instructions: string,
@@ -199,6 +207,17 @@ export async function requestStructured(
         throw new PublicHttpError(504, "TIMEOUT", "AIの結果を確認できませんでした。二重生成を避けるため自動再送はしていません。");
       }
       if (error instanceof Error && (error.message.startsWith("provider_checkpoint_") || error.message === "provider_attempt_settlement_failed")) throw error;
+      const connectionCode = preResponseConnectionCode(error);
+      if (!providerAttempt.tracked && connectionCode !== undefined && attempt + 1 < maxAttempts) {
+        console.warn("OpenAI connection failed before response; retrying personal PWA request", {
+          name,
+          attempt,
+          connectionCode,
+          elapsedMs: Date.now() - startedAt,
+        });
+        await wait(500);
+        continue;
+      }
       await markProviderAttemptAmbiguous(providerAttempt);
       console.warn("OpenAI request could not complete", {
         name,
