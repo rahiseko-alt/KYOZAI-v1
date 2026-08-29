@@ -28,6 +28,12 @@ export class PublicHttpError extends Error {
   }
 }
 
+export type SafeErrorTelemetry = {
+  requestId: string;
+  stage: string;
+  elapsedMs: number;
+};
+
 export function badRequest(message: string) {
   return new PublicHttpError(400, "BAD_REQUEST", message);
 }
@@ -52,22 +58,29 @@ export function routeUnavailable() {
   return new PublicHttpError(404, "NOT_FOUND", "この機能は公開されていません。");
 }
 
-export function publicErrorResponse(error: unknown, fallback: string) {
-  const requestId = randomUUID();
+export function publicErrorResponse(error: unknown, fallback: string, telemetry?: SafeErrorTelemetry) {
+  const requestId = telemetry?.requestId ?? randomUUID();
   const known = error instanceof PublicHttpError
     ? error
     : new PublicHttpError(502, "UPSTREAM_FAILURE", fallback);
   const diagnostic = error instanceof ImagePipelineError ? error.diagnostic : known.diagnostic;
-  if (!(error instanceof PublicHttpError) || diagnostic) {
+  const stage = diagnostic?.stage ?? telemetry?.stage;
+  if (!(error instanceof PublicHttpError) || diagnostic || telemetry) {
     const safeName = error instanceof Error ? error.name : typeof error;
-    console.error(JSON.stringify({ requestId, code: known.code, errorType: safeName, ...(diagnostic ?? {}) }));
+    console.error(JSON.stringify({
+      requestId,
+      code: known.code,
+      errorType: safeName,
+      ...(diagnostic ?? {}),
+      ...(telemetry ? { stage: telemetry.stage, elapsedMs: telemetry.elapsedMs } : {}),
+    }));
   }
   const headers = known.retryAfterSeconds ? { "Retry-After": String(known.retryAfterSeconds) } : undefined;
   return Response.json({
     error: known.message,
     code: known.code,
     requestId,
-    ...(diagnostic ? { stage: diagnostic.stage } : {}),
+    ...(stage ? { stage } : {}),
     ...(known.retryAfterSeconds ? { retryAfterSeconds: known.retryAfterSeconds } : {}),
   }, { status: known.status, headers });
 }

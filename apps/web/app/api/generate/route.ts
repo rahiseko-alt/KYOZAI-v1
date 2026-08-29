@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 
 import { readBoundedFormData } from "../../../lib/kyozai/bounded-body";
-import { generatePackage } from "../../../lib/kyozai/content-generation";
+import { generatePackage, type ContentGenerationStage } from "../../../lib/kyozai/content-generation";
 import { generationIsAvailable } from "../../../lib/kyozai/generation-access";
 import { badRequest, publicErrorResponse, routeUnavailable } from "../../../lib/kyozai/http-errors";
 import { API_ROUTE_BUDGET_MS } from "../../../lib/kyozai/openai";
@@ -15,7 +16,11 @@ export const runtime = "nodejs";
 export const maxDuration = 240;
 
 export async function POST(request: Request) {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
   const deadlineMs = Date.now() + API_ROUTE_BUDGET_MS;
+  let stage: ContentGenerationStage | "input" = "input";
+  let contentGenerationStarted = false;
   try {
     if (!generationIsAvailable()) throw routeUnavailable();
     await enforceRateLimit(request, "generate");
@@ -26,9 +31,21 @@ export async function POST(request: Request) {
     if (!isImageModelId(imageModel)) throw badRequest("画像モデルを選択してください。");
     const sources = await sourcesFromFormData(form, deadlineMs);
     const e2eMode = process.env.KYOZAI_E2E_MODE === "1" && process.env.VERCEL_ENV !== "production";
-    const result = e2eMode ? mockPackage : await generatePackage(sources, requestText, deadlineMs);
+    let result = mockPackage;
+    if (!e2eMode) {
+      contentGenerationStarted = true;
+      result = await generatePackage(sources, requestText, deadlineMs, undefined, async (nextStage) => {
+        stage = nextStage;
+        console.info(JSON.stringify({ requestId, event: "content_generation_stage_started", stage, elapsedMs: Date.now() - startedAt }));
+      });
+    }
     return NextResponse.json({ package: result, renderGrant: issueRenderGrant(result, imageModel) });
   } catch (error) {
-    return publicErrorResponse(error, "教材を生成できませんでした。入力内容を確認してもう一度お試しください。");
+    const telemetry = contentGenerationStarted ? {
+      requestId,
+      stage,
+      elapsedMs: Date.now() - startedAt,
+    } : undefined;
+    return publicErrorResponse(error, "教材を生成できませんでした。入力内容を確認してもう一度お試しください。", telemetry);
   }
 }

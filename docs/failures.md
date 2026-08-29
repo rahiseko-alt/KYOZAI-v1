@@ -1950,3 +1950,17 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：ファイル送信・build・Production切替の前に停止したため、Production、Provider、秘密値に影響はない。
 - **修正**：rootにlinkされたVercel projectから`vercel --prod --yes`を実行する。
 - **再発防止**：Vercel projectのRoot DirectoryとCLIの現在ディレクトリを配備前に照合し、filter execと`--cwd`を重ねない。
+
+## 2026-08-29 個人PWAの教材本文生成が504で未完了になった
+
+- **何が起きたか**：Productionの`POST /api/generate`がHTTP 504で終了した。ブラウザーとVercel request logで確認し、画像生成前の教材本文生成が未完了だった。
+- **影響**：その1回の教材生成は成果物を返せなかった。画像生成のOpenAI canary成功、既存の画像品質処理、秘密値には影響しない。
+- **対応**：未特定のProvider停止原因を推測してtimeout・再試行・品質工程を変更せず、本文生成の開始工程、経過時間、相関request IDだけを安全に記録する。
+- **再発防止**：504を受けたら工程別の安全な実行記録で停止箇所を特定してから、その工程だけを修正する。
+
+## 2026-08-29 Windowsの一時ファイルロックでWeb buildが1回停止した
+
+- **何が起きたか**：`next build`が`.next/server/app/manifest.webmanifest`の削除時にWindowsの`EPERM`で停止した。Next／Playwrightの所有プロセスは確認時に存在しなかった。
+- **影響**：ローカルbuild 1回だけが停止した。ソース、Production、Provider、秘密値には影響しない。
+- **修正**：所有プロセスを終了せず解放を待って同じbuildを再実行し、正常に完走した。
+- **再発防止**：Windowsの生成物ロックではプロセス名だけで終了させず、所有者を確認して解放待ち後に1回だけ再実行する。

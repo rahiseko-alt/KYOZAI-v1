@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildDesignedPackage,
+  generatePackage,
   generateScriptTiming,
   generateSlideMap,
   generateTeachingAnalysis,
@@ -63,6 +64,22 @@ describe("durable content stages", () => {
       .toMatchObject({ process: { analysis, contentFreeze: { passed: true } } });
     expect(requestText(fetchMock.mock.calls[1]!)).toContain(JSON.stringify(analysis));
     expect(requestText(fetchMock.mock.calls[2]!)).toContain(JSON.stringify(map));
+  });
+
+  it("records only the current content stage before each provider boundary", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(completed(analysis))
+      .mockResolvedValueOnce(completed(map))
+      .mockResolvedValueOnce(completed(scripts))
+      .mockResolvedValueOnce(completed({ passed: true, issues: [] })));
+    const started: string[] = [];
+
+    await generatePackage(sources, "初心者向け教材を作る", Number.POSITIVE_INFINITY, undefined, async (stage) => {
+      started.push(stage);
+    });
+
+    expect(started).toEqual(["analysis", "slide_map", "script_timing", "content_freeze", "design"]);
   });
 
   it("does not produce a designable deck when content freeze remains rejected", async () => {
