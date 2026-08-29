@@ -37,6 +37,7 @@ blind evidence、provider usage突合、物理削除記録で判定する。SaaS
 - 受入条件: GeminiとOpenAIを各1枚、ProductionでHTTP 200、PNG magic、1672×941、SHA-256、画像QA合格で記録する。小さなdeckの全ページが表示され、ZIPのPNGが表示PNGと同じhashになる。上流・decode・Sharp・QAの各故障は、秘密値や入力を含まず段階コードとrequest IDで追跡できる。timeout／接続断と上流障害は自動再送せず、利用者が成功済みページを保持したまま失敗ページだけ再開する。
 - テスト方法: SDK形Gemini／OpenAI／QAのrecorded fixture unit、段階別の故障注入unit、route error mapping、IndexedDB resumeのcomponent/E2E、typecheck、lint、全test、build、smoke、E2Eを実行する。通常CIは実APIを呼ばず、Production canaryは明示操作で1枚ずつ実行してHTTP応答・画像hash・Vercel request IDを証拠にする。現在の旧404 smoke失敗（[run 33235270171](https://github.com/rahiseko-alt/KYOZAI-v1/actions/runs/33235270171)）はこの変更で置換する。
 - 実証結果: commit `76a24ef6ed3b980fa1bfacdd6673ae89678b7a89`をProductionへ配備後、OpenAI `gpt-image-2-medium`の最小fixtureを実Provider・画像QA経由で1枚生成し、HTTP 200、PNG magic、1672×941、SHA-256一致、QA passed、attempt 1を確認した。Gemini canaryはGoogle側429を`SERVICE_UNAVAILABLE`／`image_provider_response`として安全に返した。これは契約不整合ではなくProvider利用可能性の証拠として保持する。
+- 個人PWAの初期選択: 上記実証済みの`gpt-image-2-medium`を初期選択にする。Geminiは明示選択の比較候補として維持し、Provider 429をOpenAIへの無断切替で隠さない。
 
 ## AS-IS／TO-BE
 

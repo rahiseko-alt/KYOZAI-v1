@@ -1936,3 +1936,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：Gemini選択時はProviderが利用可能になるまで画像生成できない。OpenAI `gpt-image-2-medium`は同じProductionで実画像生成・画像QA・PNG hash検証まで成功した。教材生成の一時502は今回の画像render adapterの障害と断定しない。
 - **対応**：GeminiのBeta wire契約を公式Models API SDKへ置換済みで、Provider／decode／normalize／QAの失敗段階とrequest IDを表示・ログ相関可能にした。成功済み画像は端末内checkpointから失敗ページだけ再開する。
 - **再発防止**：通常CIはrecorded fixtureでProvider契約を検査し、実Providerは低コスト1枚canaryに分離する。Provider 429をモデル契約エラーやSharp障害として混同しない。
+
+## 2026-08-29 ローカルE2Eの直後再実行が一時的にポートを使用中と判定した
+
+- **何が起きたか**：前回のPlaywright実行後、OSの`TIME_WAIT`中にE2Eを直後再実行したため、`localhost:3125`を使用中としてPlaywrightが二重起動を拒否した。
+- **影響**：ローカルの重複したE2E実行1回だけが停止した。アプリ、Production、Provider呼出し、秘密値には影響しない。
+- **修正**：listenerの所有プロセスがないことを確認して解放を待ち、同じE2Eを1回だけ再実行して3件すべて成功した。
+- **再発防止**：E2E直後の再実行前にポート解放を確認し、使用中ならPlaywrightを重ねて起動しない。

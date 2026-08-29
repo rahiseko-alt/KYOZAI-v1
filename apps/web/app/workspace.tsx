@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { readPackageResponse, readRenderedSlideResponse } from "../lib/kyozai/api-client";
-import type { ImageModelId } from "../lib/kyozai/image-models";
+import { DEFAULT_PERSONAL_PWA_IMAGE_MODEL, type ImageModelId } from "../lib/kyozai/image-models";
 import type { RenderedSlideImage } from "../lib/kyozai/image-types";
 import { createMontagePng } from "../lib/kyozai/montage";
 import { createTeachingPackageZip } from "../lib/kyozai/package-zip";
@@ -34,7 +34,7 @@ export function Workspace() {
   const [request, setRequest] = useState("新入社員向けの30分研修。初心者にもわかる表現で、具体例を入れてください。");
   const [result, setResult] = useState<TeachingPackage | null>(null);
   const [images, setImages] = useState<RenderedSlideImage[]>([]);
-  const [imageModel, setImageModel] = useState<ImageModelId | null>(null);
+  const [imageModel, setImageModel] = useState<ImageModelId | null>(DEFAULT_PERSONAL_PWA_IMAGE_MODEL);
   const [progress, setProgress] = useState<GenerationProgress>({ phase: "content", completed: 0, total: 0 });
   const [tab, setTab] = useState<Tab>("slides");
   const [slideIndex, setSlideIndex] = useState(0);
@@ -123,7 +123,7 @@ export function Workspace() {
       setImages(nextImages);
       void savePersonalPackage(next, nextImages).catch(() => undefined);
       setPendingRender(null);
-      setImageModel(null);
+      setImageModel(DEFAULT_PERSONAL_PWA_IMAGE_MODEL);
       setSlideIndex(0);
       setStep("complete");
     } catch (caught) {
@@ -158,7 +158,7 @@ export function Workspace() {
       setImages(nextImages);
       void savePersonalPackage(next, nextImages).catch(() => undefined);
       setPendingRender(null);
-      setImageModel(null);
+      setImageModel(DEFAULT_PERSONAL_PWA_IMAGE_MODEL);
       setRevision("");
       setSlideIndex(0);
       setStep("complete");
@@ -178,7 +178,7 @@ export function Workspace() {
       setImages(nextImages);
       void savePersonalPackage(checkpoint.package, nextImages).catch(() => undefined);
       setPendingRender(null);
-      setImageModel(null);
+      setImageModel(DEFAULT_PERSONAL_PWA_IMAGE_MODEL);
       setSlideIndex(0);
       setStep("complete");
     } catch (caught) {
@@ -240,7 +240,7 @@ export function Workspace() {
           setImageModel={setImageModel}
           revise={revise}
           download={download}
-          restart={() => { void clearPersonalPackage().catch(() => undefined); setResult(null); setImages([]); setImageModel(null); setStep("input"); setError(""); }}
+          restart={() => { void clearPersonalPackage().catch(() => undefined); setResult(null); setImages([]); setImageModel(DEFAULT_PERSONAL_PWA_IMAGE_MODEL); setStep("input"); setError(""); }}
         />
       )}
     </main>

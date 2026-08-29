@@ -18,6 +18,10 @@ export const IMAGE_MODELS = {
 
 export type ImageModelId = keyof typeof IMAGE_MODELS;
 
+// 個人PWAの初期値はProduction canaryで実画像・QAまで確認済みの経路に固定する。
+// Geminiは利用者が明示的に選べる比較候補として残し、Provider 429時はAPIが安全に案内する。
+export const DEFAULT_PERSONAL_PWA_IMAGE_MODEL: ImageModelId = "gpt-image-2-medium";
+
 export function isImageModelId(value: unknown): value is ImageModelId {
   return typeof value === "string" && value in IMAGE_MODELS;
 }

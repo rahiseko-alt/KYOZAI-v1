@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/render-slide/route";
 import { publicErrorResponse } from "../lib/kyozai/http-errors";
 import { imagePipelineError } from "../lib/kyozai/image-pipeline-error";
-import { isImageModelId } from "../lib/kyozai/image-models";
+import { DEFAULT_PERSONAL_PWA_IMAGE_MODEL, isImageModelId } from "../lib/kyozai/image-models";
 import { buildSlideImagePrompt } from "../lib/kyozai/image-prompt";
 import { mockRenderedSlide, renderValidatedSlide } from "../lib/kyozai/image-renderer";
 import { imageDataUrl } from "../lib/kyozai/image-types";
@@ -33,12 +33,13 @@ describe("画像生成工程", () => {
     return format === "jpeg" ? source.jpeg().toBuffer() : source.png().toBuffer();
   }
 
-  it("審査済みモデルだけを受け入れ、既定モデルを持たない", () => {
+  it("審査済みモデルだけを受け入れ、個人PWAの実証済み初期モデルを固定する", () => {
     expect(isImageModelId("gemini-3.1-flash-lite-image")).toBe(true);
     expect(isImageModelId("gemini-3.1-flash-image")).toBe(true);
     expect(isImageModelId("gpt-image-2-medium")).toBe(true);
     expect(isImageModelId("gpt-image-2-high")).toBe(false);
     expect(isImageModelId(undefined)).toBe(false);
+    expect(DEFAULT_PERSONAL_PWA_IMAGE_MODEL).toBe("gpt-image-2-medium");
   });
 
   it("凍結した表示文字を画像promptへ一字一句含める", () => {
