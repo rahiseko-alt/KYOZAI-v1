@@ -27,6 +27,16 @@ blind evidence、provider usage突合、物理削除記録で判定する。SaaS
 
 個人PWAの公開は、同経路のunit test、typecheck、lint、build、smoke、E2E、CIが合格した時点でG1のSaaS実証と切り離してmainへ反映する。G1〜G6のSaaS向け実Provider・所有者分離・artifact evidenceの不足は解消済みとは扱わず、SaaSを再開するまで凍結する。
 
+## 2026-08-29 個人PWA画像生成の回復（G1-PWA-IMG-001）
+
+- 親Gate: G1の個人PWA公開例外。
+- ゴールへの寄与: 直接テキスト入力から、正本Skillと同じ完成PNG・画像QA・ZIPまでを個人PWAで途切れず実行可能にする。
+- 着手根拠: Productionで教材生成と1枚目の`/api/render-slide`は成功し、次ページが`UPSTREAM_FAILURE`で停止した。PWA公開可否、grant、Vercelの起動・Sharpの全停止は原因ではない。
+- GitHub根拠: Google公式SDKの画像出力契約は[Interactions README](https://github.com/googleapis/js-genai#multimodal-output)の`outputs`／`response_modalities`であり、現行の手書き`response_format`／`output_image`／`steps`契約とは一致しない。実装はExperimental Interactionsではなく公式SDKの安定Models APIへ統一する。OpenAI画像生成パラメータは[公式型定義](https://github.com/openai/openai-python/blob/main/src/openai/types/image_generate_params.py#L544-L668)に照合して維持し、画像QA応答の検証だけを分離する。過去のSharp/libvips障害は[741ba3f](https://github.com/rahiseko-alt/KYOZAI-v1/commit/741ba3f928fb7870e9266ea59abfd191d80f02ff)で対処済みだが、本番実行で再確認する。
+- 実装範囲: (1) Geminiを公式SDKのModels API adapterへ置換し、SDK形の画像出力を厳格検証する。(2) `image_provider`、`image_decode`、`image_normalize`、`image_qa_response`、`image_qa_verdict`の段階コードとrequest IDを安全に相関する。プロンプト、本文、画像base64、APIキー、上流レスポンス本文は記録・返却しない。(3) 成功済みページを端末内へcheckpointし、失敗ページだけを再開できるようにする。(4) Production smokeを旧404期待からPWA可用性と非課金schema smokeへ更新する。実Providerは明示実行の1枚canaryに限定する。
+- 受入条件: GeminiとOpenAIを各1枚、ProductionでHTTP 200、PNG magic、1672×941、SHA-256、画像QA合格で記録する。小さなdeckの全ページが表示され、ZIPのPNGが表示PNGと同じhashになる。上流・decode・Sharp・QAの各故障は、秘密値や入力を含まず段階コードとrequest IDで追跡できる。timeout／接続断と上流障害は自動再送せず、利用者が成功済みページを保持したまま失敗ページだけ再開する。
+- テスト方法: SDK形Gemini／OpenAI／QAのrecorded fixture unit、段階別の故障注入unit、route error mapping、IndexedDB resumeのcomponent/E2E、typecheck、lint、全test、build、smoke、E2Eを実行する。通常CIは実APIを呼ばず、Production canaryは明示操作で1枚ずつ実行してHTTP応答・画像hash・Vercel request IDを証拠にする。現在の旧404 smoke失敗（[run 33235270171](https://github.com/rahiseko-alt/KYOZAI-v1/actions/runs/33235270171)）はこの変更で置換する。
+
 ## AS-IS／TO-BE
 
 | AS-ISの不足 | TO-BE | Gate |

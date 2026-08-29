@@ -4,17 +4,13 @@ import {
   Check,
   Clock3,
   Download,
-  FileText,
-  Link2,
   MessageSquareText,
   Presentation,
   Send,
   Sparkles,
-  UploadCloud,
   Users,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { HOME_HEADING } from "../lib/content";
+import { useEffect, useState } from "react";
 import { readPackageResponse, readRenderedSlideResponse } from "../lib/kyozai/api-client";
 import type { ImageModelId } from "../lib/kyozai/image-models";
 import type { RenderedSlideImage } from "../lib/kyozai/image-types";
@@ -26,8 +22,10 @@ import { AppHeader, DevBadge } from "./app-header";
 import { GeneratingView, type GenerationProgress } from "./generating-view";
 import { ImageModelPicker } from "./image-model-picker";
 import { SlidePreview } from "./slide-preview";
+import { InputView } from "./workspace-input-view";
 type Step = "input" | "generating" | "complete";
 type Tab = "slides" | "scenario" | "faq" | "quiz";
+type PendingRender = { package: TeachingPackage; imageModel: ImageModelId; renderGrant: string };
 export function Workspace() {
   const [step, setStep] = useState<Step>("input");
   const [files, setFiles] = useState<File[]>([]);
@@ -43,12 +41,18 @@ export function Workspace() {
   const [revision, setRevision] = useState("");
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingRender, setPendingRender] = useState<PendingRender | null>(null);
   useEffect(() => {
     void loadPersonalPackage().then((saved) => {
-      if (!saved || saved.images.length !== saved.package.slides.length) return;
+      if (!saved) return;
       setResult(saved.package);
       setImages(saved.images);
-      setStep("complete");
+      if (saved.images.length === saved.package.slides.length) {
+        setStep("complete");
+      } else if (saved.renderGrant && saved.imageModel) {
+        setImageModel(saved.imageModel);
+        setPendingRender({ package: saved.package, imageModel: saved.imageModel, renderGrant: saved.renderGrant });
+      }
     }).catch(() => undefined);
   }, []);
   const onFiles = (incoming: FileList | null) => {
@@ -80,6 +84,9 @@ export function Workspace() {
       generated.set(slide.number, await readRenderedSlideResponse(response));
       completed += 1;
       setProgress({ phase: "images", completed, total: next.slides.length });
+      const checkpoint = next.slides.map((item) => retained.get(item.number) ?? generated.get(item.number)).filter((image): image is RenderedSlideImage => Boolean(image));
+      setImages(checkpoint);
+      void savePersonalPackage(next, checkpoint, { renderGrant, imageModel: modelId }).catch(() => undefined);
     }
     const complete = next.slides.map((slide) => retained.get(slide.number) ?? generated.get(slide.number)).filter((image): image is RenderedSlideImage => Boolean(image));
     if (complete.length !== next.slides.length) throw new Error("完成画像が全ページ揃わなかったため、旧版を維持しました。");
@@ -108,10 +115,14 @@ export function Workspace() {
       const response = await fetch("/api/generate", { method: "POST", body: form });
       const generated = await readPackageResponse(response, "教材を生成できませんでした。");
       const next = generated.package;
+      setResult(next);
+      setImages([]);
+      setPendingRender({ package: next, imageModel: selectedModel, renderGrant: generated.renderGrant });
       const nextImages = await renderImages(next, selectedModel, generated.renderGrant);
       setResult(next);
       setImages(nextImages);
       void savePersonalPackage(next, nextImages).catch(() => undefined);
+      setPendingRender(null);
       setImageModel(null);
       setSlideIndex(0);
       setStep("complete");
@@ -139,10 +150,14 @@ export function Workspace() {
       });
       const revised = await readPackageResponse(response, "教材を修正できませんでした。");
       const next = revised.package;
+      setResult(next);
+      setImages([]);
+      setPendingRender({ package: next, imageModel: selectedModel, renderGrant: revised.renderGrant });
       const nextImages = await renderImages(next, selectedModel, revised.renderGrant, current, currentImages);
       setResult(next);
       setImages(nextImages);
       void savePersonalPackage(next, nextImages).catch(() => undefined);
+      setPendingRender(null);
       setImageModel(null);
       setRevision("");
       setSlideIndex(0);
@@ -150,6 +165,25 @@ export function Workspace() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "教材を修正できませんでした。");
       setStep("complete");
+    }
+  };
+  const resumeImages = async () => {
+    if (!pendingRender) return;
+    const checkpoint = pendingRender;
+    setError("");
+    setStep("generating");
+    try {
+      const nextImages = await renderImages(checkpoint.package, checkpoint.imageModel, checkpoint.renderGrant, checkpoint.package, images);
+      setResult(checkpoint.package);
+      setImages(nextImages);
+      void savePersonalPackage(checkpoint.package, nextImages).catch(() => undefined);
+      setPendingRender(null);
+      setImageModel(null);
+      setSlideIndex(0);
+      setStep("complete");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "画像生成を再開できませんでした。");
+      setStep("input");
     }
   };
   const download = async () => {
@@ -172,20 +206,23 @@ export function Workspace() {
       {menuOpen && <div className="mobile-menu"><button onClick={() => setMenuOpen(false)}>教材を作る</button><button disabled>履歴 <DevBadge /></button><button disabled>テンプレート <DevBadge /></button></div>}
       <div className="beta-strip"><span>公開体験版</span> 中核機能は実際に動作します。入力資料と生成指示は選択したAI APIへ送信され、KYOZAIのサーバーには保存しません。</div>
       {step === "input" && (
-        <InputView
-          files={files}
-          sourceUrl={sourceUrl}
-          sourceText={sourceText}
-          request={request}
-          imageModel={imageModel}
-          error={error}
-          onFiles={onFiles}
-          setSourceUrl={setSourceUrl}
-          setSourceText={setSourceText}
-          setRequest={setRequest}
-          setImageModel={setImageModel}
-          generate={generate}
-        />
+        <>
+          {pendingRender && <section className="resume-render" aria-label="画像生成の再開"><p>{images.length}枚の画像を保存しました。残りの画像生成を再開できます。</p><button onClick={resumeImages}>途中から画像生成を再開</button></section>}
+          <InputView
+            files={files}
+            sourceUrl={sourceUrl}
+            sourceText={sourceText}
+            request={request}
+            imageModel={imageModel}
+            error={error}
+            onFiles={onFiles}
+            setSourceUrl={setSourceUrl}
+            setSourceText={setSourceText}
+            setRequest={setRequest}
+            setImageModel={setImageModel}
+            generate={generate}
+          />
+        </>
       )}
       {step === "generating" && <GeneratingView isRevision={Boolean(result)} files={files} sourceUrl={sourceUrl} progress={progress} />}
       {step === "complete" && result && (
@@ -207,61 +244,6 @@ export function Workspace() {
         />
       )}
     </main>
-  );
-}
-type InputProps = {
-  files: File[]; sourceUrl: string; sourceText: string; request: string; error: string; imageModel: ImageModelId | null; onFiles: (files: FileList | null) => void;
-  setSourceUrl: (value: string) => void; setSourceText: (value: string) => void; setRequest: (value: string) => void; setImageModel: (value: ImageModelId) => void; generate: () => void;
-};
-function InputView(props: InputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  return (
-    <section className="workspace" id="create">
-      <div className="intro">
-        <p className="eyebrow"><Sparkles size={16} /> AI教材生成</p>
-        <h1>{HOME_HEADING}</h1>
-        <p>手元の資料をもとに、スライド構成・講師シナリオ・FAQ・確認テストをまとめて作成します。</p>
-      </div>
-      <div className="input-layout">
-        <div className="source-panel">
-          <div className="section-heading"><span>1</span><div><h2>もとになる資料を追加</h2><p>資料の内容だけを根拠に教材を作成します</p></div></div>
-          <button
-            className="dropzone"
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => { event.preventDefault(); props.onFiles(event.dataTransfer.files); }}
-          >
-            <UploadCloud size={34} />
-            <strong>ファイルを選択またはドロップ</strong>
-            <span>PDF・TXT・Markdown / 1ファイル2MBまで / 最大2件</span>
-          </button>
-          <input ref={inputRef} className="sr-only" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" multiple onChange={(event) => props.onFiles(event.target.files)} />
-          {props.files.length > 0 && <div className="file-list">{props.files.map((file) => <div key={file.name}><FileText size={18} /><span>{file.name}</span><small>{(file.size / 1024).toFixed(0)} KB</small></div>)}</div>}
-          <div className="divider"><span>または</span></div>
-          <label className="field-label" htmlFor="source-url"><Link2 size={17} /> 公開URL</label>
-          <input id="source-url" type="url" value={props.sourceUrl} onChange={(event) => props.setSourceUrl(event.target.value)} placeholder="https://example.com/article" />
-          <label className="field-label" htmlFor="source-text"><FileText size={17} /> テキストを直接入力</label>
-          <textarea id="source-text" className="source-text" value={props.sourceText} onChange={(event) => props.setSourceText(event.target.value)} placeholder="研修の元になる文章やメモを貼り付けてください" maxLength={80000} />
-          <div className="future-formats"><span>PowerPoint</span><DevBadge /><span>Word</span><DevBadge /></div>
-        </div>
-        <div className="request-panel">
-          <div className="section-heading"><span>2</span><div><h2>どんな教材にしますか？</h2><p>対象・時間・伝え方を自然な言葉で指定</p></div></div>
-          <textarea value={props.request} onChange={(event) => props.setRequest(event.target.value)} maxLength={1000} aria-label="教材への要望" />
-          <div className="suggestions">
-            <button onClick={() => props.setRequest("新入社員向けの30分研修。初心者にもわかる表現で、具体例を入れてください。")}>新入社員向け</button>
-            <button onClick={() => props.setRequest("現場リーダー向けの45分研修。ケーススタディと判断基準を重視してください。")}>現場リーダー向け</button>
-            <button onClick={() => props.setRequest("15分で要点を理解できる短縮版。専門用語には説明を添えてください。")}>15分の短縮版</button>
-          </div>
-          <div className="package-list">
-            <p><Check /> スライド構成</p><p><Check /> 講師シナリオ</p><p><Check /> FAQ</p><p><Check /> 確認テスト</p>
-          </div>
-          <ImageModelPicker value={props.imageModel} onChange={props.setImageModel} />
-          {props.error && <p className="error-message" role="alert">{props.error}</p>}
-          <button className="primary-action" onClick={props.generate} disabled={!props.imageModel}><Sparkles size={20} /> 教材を作ってもらう</button>
-          <p className="privacy-note">入力と生成結果はこの画面内だけで保持し、KYOZAIのサーバーには保存しません。OpenAIまたはGemini APIへ送信するため、機密情報・個人情報は入力しないでください。</p>
-        </div>
-      </div>
-    </section>
   );
 }
 type CompleteProps = {

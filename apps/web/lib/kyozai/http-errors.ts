@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { ImagePipelineError, type ImagePipelineDiagnostic } from "./image-pipeline-error";
+
 export type PublicErrorCode =
   | "BAD_REQUEST"
   | "UNAUTHORIZED"
@@ -19,6 +21,7 @@ export class PublicHttpError extends Error {
     readonly code: PublicErrorCode,
     message: string,
     readonly retryAfterSeconds?: number,
+    readonly diagnostic?: ImagePipelineDiagnostic,
   ) {
     super(message);
     this.name = "PublicHttpError";
@@ -54,15 +57,17 @@ export function publicErrorResponse(error: unknown, fallback: string) {
   const known = error instanceof PublicHttpError
     ? error
     : new PublicHttpError(502, "UPSTREAM_FAILURE", fallback);
-  if (!(error instanceof PublicHttpError)) {
+  const diagnostic = error instanceof ImagePipelineError ? error.diagnostic : known.diagnostic;
+  if (!(error instanceof PublicHttpError) || diagnostic) {
     const safeName = error instanceof Error ? error.name : typeof error;
-    console.error(JSON.stringify({ requestId, code: known.code, errorType: safeName }));
+    console.error(JSON.stringify({ requestId, code: known.code, errorType: safeName, ...(diagnostic ?? {}) }));
   }
   const headers = known.retryAfterSeconds ? { "Retry-After": String(known.retryAfterSeconds) } : undefined;
   return Response.json({
     error: known.message,
     code: known.code,
     requestId,
+    ...(diagnostic ? { stage: diagnostic.stage } : {}),
     ...(known.retryAfterSeconds ? { retryAfterSeconds: known.retryAfterSeconds } : {}),
   }, { status: known.status, headers });
 }

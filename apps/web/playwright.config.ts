@@ -28,9 +28,9 @@ export default defineConfig({
     // サーバ側の例外（Server Component / Server Action のエラー）をテストのログに出す。
     stdout: "pipe",
     stderr: "pipe",
-    // CI は公開Productionと同じ「生成を閉じた」画面を検証する。認証済み
-    // Preview の実job完走は、Supabase/AI を接続した専用受入環境で実施する。
-    env: { VERCEL_ENV: "production" },
+    // 個人PWAの画面と、実Providerを呼ばないschema境界をProduction相当で検証する。
+    // 実Providerの画像canaryは通常CIではなく明示操作に限定する。
+    env: { VERCEL_ENV: "production", KYOZAI_PERSONAL_PWA_ENABLED: "1", PROCESS_PARITY_PIPELINE_ENABLED: "1" },
   },
   projects: [
     { name: "chromium", grepInvert: /@mobile/, use: { ...devices["Desktop Chrome"] } },
