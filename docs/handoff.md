@@ -35,7 +35,7 @@
   Cloudflare Access One-time PINとし、Vercel APIでAccess JWTを検証する。
 - 完了: `apps/control-plane`にD1初期schema、private R2 binding、5分dispatch/6時間cleanup Cron、
   内部token境界、fail-closed healthを追加した。control-plane型検査、4境界テスト、local D1 migration、
-  local `/health`=200（`acceptingNewJobs:false`）、web typecheck/lint、web 158 testsは合格した。
+  local `/health`=200（`acceptingNewJobs:false`）、web typecheck/lint、web 178 testsは合格した。個人PWAの生成結果は端末IndexedDBへ保存・復元する。
   Wrangler 4.126.0へ更新し、依存監査は脆弱性0件で合格している。
 -  進行中: control-planeに内部token限定の`list/read/cancel/delete` command gatewayを追加した。owner IDを
   必須入力にし、全job読取・更新を`owner_id`条件で限定する。`create`も追加し、受付停止、Cloudflare
