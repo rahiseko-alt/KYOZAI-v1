@@ -129,3 +129,11 @@ G6完了後に一括して再審議する。既存記録は削除・上書きし
 - 影響: Supabase schedulerのPreview実証は実施しない。Cloudflareへの置換範囲、認証方式、所有者分離、Free上限でのfail-closedをG1で実証する。
 - 次の判断: Cloudflare Freeの実利用条件を確認し、上限超過時に課金せず止まる構成を実装前に固定する。
 - 状態: superseded_by_user_decision
+
+## 2026-08-29 Windows Wrangler fixture cleanupの延期
+
+- 発見Gate: G1
+- 症状: 実Worker/D1のdirect-text機能検証は全項目を通過するが、Windows版Wranglerのchild processが終了後もportを解放しない場合がある。
+- 判断: G1のPreview実Provider、Access所有者分離、usage突合の外部証拠を阻害しない小問題として、G6完了後に再審議する。
+- 実施済み: 起動時に所有PIDを記録し、そのprocess treeだけを停止するcleanup、port解放確認、失敗履歴を追加した。
+- 状態: deferred_after_g6

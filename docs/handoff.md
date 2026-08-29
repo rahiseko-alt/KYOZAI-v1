@@ -1,6 +1,6 @@
 # KYOZAI handoff
 
-更新: 2026-08-28
+更新: 2026-08-29
 
 ## 現在のGate
 
@@ -10,6 +10,13 @@
 - ゴールへの寄与: Cloudflare上の実DB、private artifact、定期実行、認証境界を通して、
   直接入力を実Providerで完走させる。
 - 合格証拠: Preview実Provider完走、故障注入行列、provider usage突合、PNG／ZIP hash一致。
+
+## 2026-08-29 最新状態
+
+- G1実装範囲（D1/R2/Workers gateway、dispatch、provider accounting、Access JWT所有者分離、direct-text経路）は実装済み。
+- CIはtypecheck/lint/test/build、smoke、E2E、CodeQL、ci-greenが成功。local direct-text fixtureは作成、冪等性、所有者分離、D1 readback、cancel/deleteまで通過した。
+- Windows版Wranglerの子processが終了後にportを解放しない問題は、G1のPreview受入を直接変えないためG6後へ再審議する。Production生成404ロックは維持する。
+- G1未完了は外部Preview設定と実Provider証拠のみ。利用者がCloudflare/Vercelへ秘密値を直接登録した後、`docs/g1-preview-evidence-capture-2026-08-29.md`のE1〜E5を実行する。
 
 ## 復帰先
 
