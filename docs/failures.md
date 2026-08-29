@@ -1901,3 +1901,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：ローカルのcontrol-plane build証拠を取得できなかった。生成経路、remote D1/R2、provider、秘密値への影響はない。
 - **修正状況**：既知のWindows Wrangler実行環境差として記録し、Linux CIまたはCloudflare実行環境のdry-runを合格証拠に使う。ローカルの型検査・lint・web testは別途合格している。
 - **再発防止**：Windowsローカルの終了コードだけでWorker buildを合格扱いにせず、CIの実行結果とbinding解決ログを併用する。
+
+## 2026-08-29 個人PWA方針のGoalスキーマ反映漏れ
+
+- **何が起きたか**：`shared/kyozai-parity-goal.json`へ個人PWA方針の`deliveryMode`／`saasFrozen`を追加した際、厳格なGoal JSON Schemaへ同じプロパティを追加し忘れ、CIの`validate:goal`が拒否した。
+- **影響**：アプリの型検査・テスト・E2Eには影響せず、CIの契約検証ジョブと`ci-green`だけが失敗した。
+- **修正**：Goal Schemaへ両プロパティの型と許容値を追加し、`pnpm validate:goal`、skill検証、Webテスト178件、型検査、lintを再実行して合格させた。
+- **再発防止**：Goal JSONの方針フィールドを変更する際は、JSON本体と厳格Schemaを同一コミットで更新し、CI契約検証を先に実行する。
