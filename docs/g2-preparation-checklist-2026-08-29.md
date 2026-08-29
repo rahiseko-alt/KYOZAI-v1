@@ -14,6 +14,13 @@ bypassing G2 provenance, quota, and package requirements.
   accepted private original through normalized chunks into the delivered ZIP.
 - Required acceptance evidence: `long_pdf_run`, `long_markdown_run`, and
   `manifest_file_reconciliation` from `shared/kyozai-parity-goal.json`.
+- Start condition: G1 is completed with all of its Preview evidence recorded;
+  the single G1 PR is no longer the vehicle for product changes.  G2 then gets
+  its own PR before any G3 work starts.
+- Evidence record at G2 start: record this parent Gate, the goal contribution,
+  the three evidence IDs, fixture IDs, and the intended G2 PR in the PR
+  description.  At completion, add the corresponding commit SHA, CI URLs, and
+  Preview run references; do not infer a pass from a local test alone.
 - Non-goal of this note: changing the canonical Skill, enabling a preview, or
   recording G2 as started.
 

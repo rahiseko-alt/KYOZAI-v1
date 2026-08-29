@@ -5,10 +5,11 @@
 
 ## Gate境界
 
-- 親Gate: G1（`shared/kyozai-parity-goal.json` の `activeGate`）。
+- 親Gate: G3（pending。現在の `activeGate` はG1であり、G3の開始を意味しない）。
 - ゴールへの寄与: 正本SkillとAPPが、字幕付きYouTubeと参考デザインを同じ原典追跡・工程契約で扱えるようにする。
 - G3の合格証拠: `captioned_youtube_run` と `reference_design_run`。実Provider、Preview、実fixtureの証拠が必要であり、この文書・単体テストだけでは合格しない。
-- 着手条件: G1の実縦断証拠が揃い、G1 PRが完了するまで、下記の製品コード、migration、fixture実行、Gate状態は変更しない。
+- 着手条件: G1とG2の全必須実fixture・Preview証拠が揃い、各Gateの単一PRが完了するまで、下記の製品コード、migration、fixture実行、Gate状態は変更しない。
+- G3開始時の証拠記録: PR説明に親Gate G3、上記のゴールへの寄与、`captioned_youtube_run`／`reference_design_run`、各fixture ID、先行G1/G2の証拠参照を固定する。完了時はさらにcommit SHA、CI URL、Preview runを追記し、ローカル試験だけでは合格にしない。
 
 このチェックリストは `docs/skill-app-parity-execution-plan-2026-08-26.md`、`shared/kyozai-parity-goal.json`、正本の [KYOZAI Slide Skill](../.agents/skills/kyozai-slide/SKILL.md)、[KYOZAI Design Skill](../.agents/skills/kyozai-design/SKILL.md) を照合して作成した。G3のPRを始める際は、ここに記した決定を再確認し、実装前に「G3」「ゴールへの寄与」「合格証拠」をPR説明に記録する。
 

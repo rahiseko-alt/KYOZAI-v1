@@ -4,6 +4,7 @@
 - 親Gate: G4（現在のactive GateはG1。これは実装前の準備記録であり、Gate状態を変更しない）
 - ゴールへの寄与: 型付きrevisionを独立して実行し、対象外artifactを変えず、失敗時も旧finalを保持して復元可能にする。
 - G4合格証拠: `three_revision_runs`、`zero_untargeted_diffs`、`rollback_proof`。
+- 着手条件と証拠記録: G1〜G3の必須実fixture・Preview証拠と各Gateの単一PR完了後にだけ、G4専用PRを開始する。そのPR説明に親Gate G4、上記のゴールへの寄与、3つの合格証拠ID、成功・失敗・復元fixture IDを固定する。完了時はcommit SHA、CI URL、PreviewのD1/R2 readback hash、provider usage突合、PC/mobile E2Eを証拠へ追記し、ローカル試験のみでGateを進めない。
 
 ## 現在地と不足
 
