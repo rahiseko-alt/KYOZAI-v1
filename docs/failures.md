@@ -1943,3 +1943,10 @@ Skill/APPの工程同等化、画像品質、Vercel上の`sharp`起動を優先�
 - **影響**：ローカルの重複したE2E実行1回だけが停止した。アプリ、Production、Provider呼出し、秘密値には影響しない。
 - **修正**：listenerの所有プロセスがないことを確認して解放を待ち、同じE2Eを1回だけ再実行して3件すべて成功した。
 - **再発防止**：E2E直後の再実行前にポート解放を確認し、使用中ならPlaywrightを重ねて起動しない。
+
+## 2026-08-29 Vercel配備でworkspaceの実行位置を二重に指定した
+
+- **何が起きたか**：`pnpm --filter web exec vercel`をroot directoryが`apps/web`のVercel projectへ実行し、CLIが`apps/web/apps/web`を参照して配備前に拒否した。
+- **影響**：ファイル送信・build・Production切替の前に停止したため、Production、Provider、秘密値に影響はない。
+- **修正**：rootにlinkされたVercel projectから`vercel --prod --yes`を実行する。
+- **再発防止**：Vercel projectのRoot DirectoryとCLIの現在ディレクトリを配備前に照合し、filter execと`--cwd`を重ねない。
