@@ -1,5 +1,5 @@
-const CACHE_NAME = "kyozai-shell-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
+const CACHE_NAME = "kyozai-shell-v2";
+const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-maskable.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)));
